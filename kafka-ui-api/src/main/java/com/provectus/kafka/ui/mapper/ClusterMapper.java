@@ -49,6 +49,8 @@ public interface ClusterMapper {
 
   ClusterDTO toCluster(InternalClusterState clusterState);
 
+  // might need to map our buf settings here?
+
   @Mapping(target = "protobufFile", source = "protobufFile", qualifiedByName = "resolvePath")
   @Mapping(target = "properties", source = "properties", qualifiedByName = "setProperties")
   @Mapping(target = "schemaRegistry", source = ".", qualifiedByName = "setSchemaRegistry")
