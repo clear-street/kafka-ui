@@ -11,6 +11,9 @@ import org.apache.kafka.common.utils.Bytes;
 
 public interface RecordSerDe {
 
+  // This is the interface our clst-proto serde class will fulfill
+
+
   @Value
   @Builder
   class DeserializedKeyValue {
@@ -22,8 +25,10 @@ public interface RecordSerDe {
     @Nullable String valueSchemaId;
   }
 
+  // we must implement this method & reach out to Buf
   DeserializedKeyValue deserialize(ConsumerRecord<Bytes, Bytes> msg);
 
+  // I think this can be an empty implementation, this is probably just for publishing in the UI
   ProducerRecord<byte[], byte[]> serialize(String topic,
                                            @Nullable String key,
                                            @Nullable String data,
