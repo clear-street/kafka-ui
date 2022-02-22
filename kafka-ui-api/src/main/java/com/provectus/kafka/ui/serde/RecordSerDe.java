@@ -17,12 +17,18 @@ public interface RecordSerDe {
   @Value
   @Builder
   class DeserializedKeyValue {
-    @Nullable String key;
-    @Nullable String value;
-    @Nullable MessageFormat keyFormat;
-    @Nullable MessageFormat valueFormat;
-    @Nullable String keySchemaId;
-    @Nullable String valueSchemaId;
+    @Nullable
+    String key;
+    @Nullable
+    String value;
+    @Nullable
+    MessageFormat keyFormat;
+    @Nullable
+    MessageFormat valueFormat;
+    @Nullable
+    String keySchemaId;
+    @Nullable
+    String valueSchemaId;
   }
 
   // we must implement this method & reach out to Buf
