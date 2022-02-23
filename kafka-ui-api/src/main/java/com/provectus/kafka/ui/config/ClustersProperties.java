@@ -40,6 +40,11 @@ public class ClustersProperties {
     Properties properties;
     boolean readOnly = false;
     boolean disableLogDirsCollection = false;
+
+    // clst specific
+    String bufRegistry;
+    String bufUsername;
+    String bufApiToken;
   }
 
   @Data

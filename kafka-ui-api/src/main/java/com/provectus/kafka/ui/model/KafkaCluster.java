@@ -27,10 +27,14 @@ public class KafkaCluster {
   private final String schemaNameTemplate;
   private final String keySchemaNameTemplate;
   private final Path protobufFile;
-  // need to add settings for buf
   private final String protobufMessageName;
   private final Map<String, String> protobufMessageNameByTopic;
   private final Properties properties;
   private final boolean readOnly;
   private final boolean disableLogDirsCollection;
+
+  // clst specific
+  private final String bufRegistry;
+  private final String bufUsername;
+  private final String bufApiToken;
 }

@@ -33,11 +33,10 @@ public class DeserializationService {
         log.info("Using ProtobufFileRecordSerDe for cluster '{}'", cluster.getName());
         return new ProtobufFileRecordSerDe(cluster.getProtobufFile(),
             cluster.getProtobufMessageNameByTopic(), cluster.getProtobufMessageName());
+      } else if ((cluster.getSchemaRegistry() != null) && (cluster.getBufRegistry() != null)) {
+        log.info("Using BufAndSchemaRegistryAwareRecordSerDe for cluster '{}'", cluster.getName());
+        return new SchemaRegistryAwareRecordSerDe(cluster);
       } else if (cluster.getSchemaRegistry() != null) {
-
-        // Need to either add support for clst-proto decoding, or return a tuple of decoders
-        // (and change all other code that relies on this being one returned value)
-
         log.info("Using SchemaRegistryAwareRecordSerDe for cluster '{}'", cluster.getName());
         return new SchemaRegistryAwareRecordSerDe(cluster);
       } else {
