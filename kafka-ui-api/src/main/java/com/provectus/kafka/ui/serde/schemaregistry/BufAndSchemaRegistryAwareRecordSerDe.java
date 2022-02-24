@@ -38,10 +38,17 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.header.Header;
+import org.apache.kafka.common.header.Headers;
 import org.apache.kafka.common.utils.Bytes;
 
 @Slf4j
 public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
+
+  class ProtoSchema {
+    String fullyQualifiedTypeName;
+    String schemaID;
+  }
 
   private final SchemaRegistryAwareRecordSerDe schemaRegistryAwareRecordSerDe;
   private final KafkaCluster cluster;
@@ -59,16 +66,60 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   }
 
   private static BufSchemaRegistryClient createBufRegistryClient(KafkaCluster cluster) {
+    // TODO: pass args from cluster to buf constructor
     return new BufSchemaRegistryClient();
   }
 
   public DeserializedKeyValue deserialize(ConsumerRecord<Bytes, Bytes> msg) {
-    try {
-      DeserializedKeyValueBuilder builder = DeserializedKeyValue.builder();
-      return builder.build();
-    } catch (Throwable e) {
-      throw new RuntimeException("Failed to parse record from topic " + msg.topic(), e);
+    ProtoSchema protoSchema = protoSchemaFromHeaders(msg.headers());
+    if (protoSchema != null) {
+      // TODO: parse message
+      // return
     }
+
+    protoSchema = protoSchemaFromTopic(msg.topic());
+
+    if (protoSchema != null) {
+      // TODO: parse message
+      // return
+    }
+
+    return this.schemaRegistryAwareRecordSerDe.deserialize(msg);
+  }
+
+  private @Nullable ProtoSchema protoSchemaFromHeaders(Headers headers) {
+    // extract PROTOBUF_TYPE header
+    String fullyQualifiedTypeName = null;
+    for (Header header : headers.headers("PROTOBUF_TYPE")) {
+      fullyQualifiedTypeName = new String(header.value());
+    }
+
+    if (fullyQualifiedTypeName == null) {
+      return null;
+    }
+
+    // extract PROTOBUF_SCHEMA_ID header
+    String schemaID = null;
+    for (Header header : headers.headers("PROTOBUF_SCHEMA_ID")) {
+      schemaID = new String(header.value());
+    }
+
+    ProtoSchema ret = new ProtoSchema();
+    ret.fullyQualifiedTypeName = fullyQualifiedTypeName;
+    ret.schemaID = schemaID;
+    return ret;
+  }
+
+  private @Nullable ProtoSchema protoSchemaFromTopic(String topic) {
+    if (!topic.contains(".proto.")) {
+      return null;
+    }
+
+    // extract fqtn
+    String[] parts = topic.split("\\.proto\\.");
+    ProtoSchema ret = new ProtoSchema();
+    ret.fullyQualifiedTypeName = parts[parts.length - 1];
+    return ret;
   }
 
   @Override
