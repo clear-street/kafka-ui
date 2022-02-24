@@ -1,6 +1,7 @@
 package com.provectus.kafka.ui.serde;
 
 import com.provectus.kafka.ui.model.KafkaCluster;
+import com.provectus.kafka.ui.serde.schemaregistry.BufAndSchemaRegistryAwareRecordSerDe;
 import com.provectus.kafka.ui.serde.schemaregistry.SchemaRegistryAwareRecordSerDe;
 import com.provectus.kafka.ui.service.ClustersStorage;
 import java.util.Map;
@@ -35,7 +36,7 @@ public class DeserializationService {
             cluster.getProtobufMessageNameByTopic(), cluster.getProtobufMessageName());
       } else if ((cluster.getSchemaRegistry() != null) && (cluster.getBufRegistry() != null)) {
         log.info("Using BufAndSchemaRegistryAwareRecordSerDe for cluster '{}'", cluster.getName());
-        return new SchemaRegistryAwareRecordSerDe(cluster);
+        return new BufAndSchemaRegistryAwareRecordSerDe(cluster);
       } else if (cluster.getSchemaRegistry() != null) {
         log.info("Using SchemaRegistryAwareRecordSerDe for cluster '{}'", cluster.getName());
         return new SchemaRegistryAwareRecordSerDe(cluster);

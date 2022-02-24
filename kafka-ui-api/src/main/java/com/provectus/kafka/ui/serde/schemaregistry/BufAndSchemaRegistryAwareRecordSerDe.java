@@ -74,14 +74,16 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     ProtoSchema protoSchema = protoSchemaFromHeaders(msg.headers());
     if (protoSchema != null) {
       // TODO: parse message
-      // return
+      log.info("Skipping buf for schema: {}", protoSchema.fullyQualifiedTypeName);
+      return this.schemaRegistryAwareRecordSerDe.deserialize(msg);
     }
 
     protoSchema = protoSchemaFromTopic(msg.topic());
 
     if (protoSchema != null) {
-      // TODO: parse message
-      // return
+      // TODO: parse message and return it
+      log.info("Skipping buf for schema: {}", protoSchema.fullyQualifiedTypeName);
+      return this.schemaRegistryAwareRecordSerDe.deserialize(msg);
     }
 
     return this.schemaRegistryAwareRecordSerDe.deserialize(msg);
@@ -127,8 +129,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
                                                   @Nullable String key,
                                                   @Nullable String data,
                                                   @Nullable Integer partition) {
-    // TODO: skip?
-    return new ProducerRecord<byte[], byte[]>("", new byte[0]);
+    return this.schemaRegistryAwareRecordSerDe.serialize(topic, key, data, partition);
   }
 
   @Override
