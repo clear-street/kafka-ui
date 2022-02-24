@@ -5,6 +5,7 @@ import static io.confluent.kafka.serializers.AbstractKafkaSchemaSerDeConfig.BASI
 import static io.confluent.kafka.serializers.AbstractKafkaSchemaSerDeConfig.USER_INFO_CONFIG;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.provectus.kafka.ui.client.BufSchemaRegistryClient;
 import com.provectus.kafka.ui.exception.ValidationException;
 import com.provectus.kafka.ui.model.KafkaCluster;
 import com.provectus.kafka.ui.model.MessageSchemaDTO;
@@ -40,37 +41,34 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.utils.Bytes;
 
 @Slf4j
-public class SchemaRegistryAwareRecordSerDe implements RecordSerDe {
+public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
-  private static final StringMessageFormatter FALLBACK_FORMATTER = new StringMessageFormatter();
-
-  private static final ProtobufSchemaConverter protoSchemaConverter = new ProtobufSchemaConverter();
-  private static final AvroJsonSchemaConverter avroSchemaConverter = new AvroJsonSchemaConverter();
-
+  private final SchemaRegistryAwareRecordSerDe schemaRegistryAwareRecordSerDe;
   private final KafkaCluster cluster;
-  private final SchemaRegistryClient schemaRegistryClient;
+  private final BufSchemaRegistryClient bufClient;
 
-  private final Map<MessageFormat, MessageFormatter> schemaRegistryFormatters;
-
-  private static SchemaRegistryClient createSchemaRegistryClient(KafkaCluster cluster) {
-  }
-
-  public SchemaRegistryAwareRecordSerDe(KafkaCluster cluster) {
-    this(cluster, createSchemaRegistryClient(cluster));
+  public BufAndSchemaRegistryAwareRecordSerDe(KafkaCluster cluster) {
+    this(cluster, createBufRegistryClient(cluster));
   }
 
   @VisibleForTesting
-  SchemaRegistryAwareRecordSerDe(KafkaCluster cluster, SchemaRegistryClient schemaRegistryClient) {
+  public BufAndSchemaRegistryAwareRecordSerDe(KafkaCluster cluster, BufSchemaRegistryClient bufClient) {
+    this.schemaRegistryAwareRecordSerDe = new SchemaRegistryAwareRecordSerDe(cluster);
     this.cluster = cluster;
-    this.schemaRegistryClient = schemaRegistryClient;
-    this.schemaRegistryFormatters = Map.of(
-        MessageFormat.AVRO, new AvroMessageFormatter(schemaRegistryClient),
-        MessageFormat.JSON, new JsonSchemaMessageFormatter(schemaRegistryClient),
-        MessageFormat.PROTOBUF, new ProtobufMessageFormatter(schemaRegistryClient)
-    );
+    this.bufClient = bufClient;
+  }
+
+  private static BufSchemaRegistryClient createBufRegistryClient(KafkaCluster cluster) {
+    return new BufSchemaRegistryClient();
   }
 
   public DeserializedKeyValue deserialize(ConsumerRecord<Bytes, Bytes> msg) {
+    try {
+      DeserializedKeyValueBuilder builder = DeserializedKeyValue.builder();
+      return builder.build();
+    } catch (Throwable e) {
+      throw new RuntimeException("Failed to parse record from topic " + msg.topic(), e);
+    }
   }
 
   @Override
@@ -78,10 +76,13 @@ public class SchemaRegistryAwareRecordSerDe implements RecordSerDe {
                                                   @Nullable String key,
                                                   @Nullable String data,
                                                   @Nullable Integer partition) {
-    // skip
+    // TODO: skip?
+    return new ProducerRecord<byte[], byte[]>("", new byte[0]);
   }
 
   @Override
   public TopicMessageSchemaDTO getTopicSchema(String topic) {
+    // TODO
+    return new TopicMessageSchemaDTO();
   }
 }
