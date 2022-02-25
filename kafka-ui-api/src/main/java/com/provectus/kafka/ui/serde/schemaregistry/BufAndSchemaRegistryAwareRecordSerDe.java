@@ -5,8 +5,10 @@ import com.google.common.annotations.VisibleForTesting;
 import com.provectus.kafka.ui.client.BufSchemaRegistryClient;
 import com.provectus.kafka.ui.model.KafkaCluster;
 import com.provectus.kafka.ui.model.MessageSchemaDTO;
+import com.provectus.kafka.ui.model.ProtoSchema;
 import com.provectus.kafka.ui.model.TopicMessageSchemaDTO;
 import com.provectus.kafka.ui.serde.RecordSerDe;
+import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
 import javax.annotation.Nullable;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -18,22 +20,25 @@ import org.apache.kafka.common.utils.Bytes;
 @Slf4j
 public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
-  class ProtoSchema {
-    String fullyQualifiedTypeName;
-    String schemaID;
-  }
-
   private final SchemaRegistryAwareRecordSerDe schemaRegistryAwareRecordSerDe;
   private final KafkaCluster cluster;
   private final BufSchemaRegistryClient bufClient;
 
   public BufAndSchemaRegistryAwareRecordSerDe(KafkaCluster cluster) {
-    this(cluster, createBufRegistryClient(cluster));
+    this(cluster, null, createBufRegistryClient(cluster));
   }
 
   @VisibleForTesting
-  public BufAndSchemaRegistryAwareRecordSerDe(KafkaCluster cluster, BufSchemaRegistryClient bufClient) {
-    this.schemaRegistryAwareRecordSerDe = new SchemaRegistryAwareRecordSerDe(cluster);
+  public BufAndSchemaRegistryAwareRecordSerDe(
+      KafkaCluster cluster,
+      SchemaRegistryClient schemaRegistryClient,
+      BufSchemaRegistryClient bufClient) {
+    if (schemaRegistryClient == null) {
+      this.schemaRegistryAwareRecordSerDe = new SchemaRegistryAwareRecordSerDe(cluster);
+    } else {
+      // used for testing
+      this.schemaRegistryAwareRecordSerDe = new SchemaRegistryAwareRecordSerDe(cluster, schemaRegistryClient);
+    }
     this.cluster = cluster;
     this.bufClient = bufClient;
   }
@@ -63,7 +68,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     return this.schemaRegistryAwareRecordSerDe.deserialize(msg);
   }
 
-  private @Nullable ProtoSchema protoSchemaFromHeaders(Headers headers) {
+  @Nullable ProtoSchema protoSchemaFromHeaders(Headers headers) {
     // extract PROTOBUF_TYPE header
     String fullyQualifiedTypeName = null;
     for (Header header : headers.headers("PROTOBUF_TYPE")) {
