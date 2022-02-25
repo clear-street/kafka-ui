@@ -45,6 +45,7 @@ public class ClustersProperties {
     String bufRegistry;
     String bufUsername;
     String bufApiToken;
+    // clst specific
   }
 
   @Data

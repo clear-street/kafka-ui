@@ -62,3 +62,5 @@ Then re-run step 2 of Initial Setup.
 We add `BufAndSchemaRegistryAwareRecordSerDe`, which can do both Buf- and SchemaRegistry-aware deserialization of Kafka messages.
 
 The `BufClient` manages connection to Buf registry.
+
+The `// clst specific` comment should help with merging with upstream.
