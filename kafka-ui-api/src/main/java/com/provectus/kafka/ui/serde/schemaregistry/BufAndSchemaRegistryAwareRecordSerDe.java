@@ -4,6 +4,7 @@ package com.provectus.kafka.ui.serde.schemaregistry;
 import com.google.common.annotations.VisibleForTesting;
 import com.provectus.kafka.ui.client.BufSchemaRegistryClient;
 import com.provectus.kafka.ui.model.KafkaCluster;
+import com.provectus.kafka.ui.model.MessageSchemaDTO;
 import com.provectus.kafka.ui.model.TopicMessageSchemaDTO;
 import com.provectus.kafka.ui.serde.RecordSerDe;
 import javax.annotation.Nullable;
@@ -106,7 +107,13 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
   @Override
   public TopicMessageSchemaDTO getTopicSchema(String topic) {
-    // TODO
-    return new TopicMessageSchemaDTO();
+    // TODO: what is the importance of this?
+    final MessageSchemaDTO schema = new MessageSchemaDTO()
+        .name("unknown")
+        .source(MessageSchemaDTO.SourceEnum.UNKNOWN)
+        .schema("CLST_PROTOBUF");
+    return new TopicMessageSchemaDTO()
+        .key(schema)
+        .value(schema);
   }
 }
