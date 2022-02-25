@@ -120,7 +120,6 @@ class BufAndSchemaRegistryAwareRecordSerDeTest {
           Bytes.wrap("key".getBytes()),
           Bytes.wrap("value".getBytes())
       );
-      record.headers().add("PROTOBUF_TYPE", "protobuf_type".getBytes());
       var result = serde.deserialize(record);
 
       // verify schema registry was skipped
