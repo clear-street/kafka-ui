@@ -43,6 +43,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     return new BufSchemaRegistryClient();
   }
 
+  @Override
   public DeserializedKeyValue deserialize(ConsumerRecord<Bytes, Bytes> msg) {
     ProtoSchema protoSchema = protoSchemaFromHeaders(msg.headers());
     if (protoSchema != null) {
