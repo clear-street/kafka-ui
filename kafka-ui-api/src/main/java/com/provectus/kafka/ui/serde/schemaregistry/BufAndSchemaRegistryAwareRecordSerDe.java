@@ -53,7 +53,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     ProtoSchema protoSchema = protoSchemaFromHeaders(msg.headers());
     if (protoSchema != null) {
       // TODO: parse message
-      log.info("Skipping buf for schema: {}", protoSchema.fullyQualifiedTypeName);
+      log.info("Skipping buf for schema: {}", protoSchema.getFullyQualifiedTypeName());
       return this.schemaRegistryAwareRecordSerDe.deserialize(msg);
     }
 
@@ -61,7 +61,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
     if (protoSchema != null) {
       // TODO: parse message and return it
-      log.info("Skipping buf for schema: {}", protoSchema.fullyQualifiedTypeName);
+      log.info("Skipping buf for schema: {}", protoSchema.getFullyQualifiedTypeName());
       return this.schemaRegistryAwareRecordSerDe.deserialize(msg);
     }
 
@@ -86,12 +86,12 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     }
 
     ProtoSchema ret = new ProtoSchema();
-    ret.fullyQualifiedTypeName = fullyQualifiedTypeName;
-    ret.schemaID = schemaID;
+    ret.setFullyQualifiedTypeName(fullyQualifiedTypeName);
+    ret.setSchemaID(schemaID);
     return ret;
   }
 
-  private @Nullable ProtoSchema protoSchemaFromTopic(String topic) {
+  @Nullable ProtoSchema protoSchemaFromTopic(String topic) {
     if (!topic.contains(".proto.")) {
       return null;
     }
@@ -99,7 +99,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     // extract fqtn
     String[] parts = topic.split("\\.proto\\.");
     ProtoSchema ret = new ProtoSchema();
-    ret.fullyQualifiedTypeName = parts[parts.length - 1];
+    ret.setFullyQualifiedTypeName(parts[parts.length - 1]);
     return ret;
   }
 

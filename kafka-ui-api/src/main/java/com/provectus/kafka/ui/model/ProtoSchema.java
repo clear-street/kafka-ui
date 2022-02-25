@@ -1,6 +1,9 @@
 package com.provectus.kafka.ui.model;
 
+import lombok.Data;
+
+@Data
 public class ProtoSchema {
-  String fullyQualifiedTypeName;
-  String schemaID;
+  private String fullyQualifiedTypeName;
+  private String schemaID;
 }

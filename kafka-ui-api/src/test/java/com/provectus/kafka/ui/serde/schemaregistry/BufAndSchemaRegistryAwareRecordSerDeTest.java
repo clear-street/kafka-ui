@@ -142,8 +142,17 @@ class BufAndSchemaRegistryAwareRecordSerDeTest {
           Bytes.wrap("key".getBytes()),
           Bytes.wrap("value".getBytes())
       );
-      record.headers().add("PROTOBUF_TYPE", "protobuf_type".getBytes());
+      record.headers().add("PROTOBUF_TYPE", "protobuf_type.foo.v1.bar".getBytes());
+      record.headers().add("PROTOBUF_SCHEMA_ID", "schema_id".getBytes());
       ProtoSchema protoSchema = serde.protoSchemaFromHeaders(record.headers());
+      assertThat(protoSchema.getFullyQualifiedTypeName()).isEqualTo("protobuf_type.foo.v1.bar");
+      assertThat(protoSchema.getSchemaID()).isEqualTo("schema_id");
+    }
+
+    @Test
+    void testProtoSchemaCorrectFromTopic() throws Exception {
+      ProtoSchema protoSchema = serde.protoSchemaFromTopic("test-topic.proto.v1.foo.bar");
+      assertThat(protoSchema.getFullyQualifiedTypeName()).isEqualTo("v1.foo.bar");
     }
 
     private void assertJsonsEqual(String expected, String actual) throws JsonProcessingException {
@@ -160,6 +169,15 @@ class BufAndSchemaRegistryAwareRecordSerDeTest {
       return output.toByteArray();
     }
 
+    private Bytes bytesWithMagicByteAndSchemaId(int schemaId, byte[] body) {
+      return new Bytes(
+          ByteBuffer.allocate(1 + 4 + body.length)
+              .put((byte) 0)
+              .putInt(schemaId)
+              .put(body)
+              .array()
+      );
+    }
   }
 
 }
