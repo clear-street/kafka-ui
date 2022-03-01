@@ -1,7 +1,8 @@
 package com.provectus.kafka.ui.serde.schemaregistry;
 
-
 import com.google.common.annotations.VisibleForTesting;
+import com.google.protobuf.Descriptors.Descriptor;
+import com.google.protobuf.DynamicMessage;
 import com.provectus.kafka.ui.client.BufSchemaRegistryClient;
 import com.provectus.kafka.ui.model.KafkaCluster;
 import com.provectus.kafka.ui.model.MessageSchemaDTO;
@@ -9,7 +10,12 @@ import com.provectus.kafka.ui.model.ProtoSchema;
 import com.provectus.kafka.ui.model.TopicMessageSchemaDTO;
 import com.provectus.kafka.ui.serde.RecordSerDe;
 import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
+import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchemaUtils;
+import java.io.ByteArrayInputStream;
+import java.util.HashMap;
+import java.util.Map;
 import javax.annotation.Nullable;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -23,6 +29,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   private final SchemaRegistryAwareRecordSerDe schemaRegistryAwareRecordSerDe;
   private final KafkaCluster cluster;
   private final BufSchemaRegistryClient bufClient;
+  private final Map<String, Descriptor> messageDescriptorMap;
 
   public BufAndSchemaRegistryAwareRecordSerDe(KafkaCluster cluster) {
     this(cluster, null, createBufRegistryClient(cluster));
@@ -41,6 +48,8 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     }
     this.cluster = cluster;
     this.bufClient = bufClient;
+
+    this.messageDescriptorMap = new HashMap<>();
   }
 
   private static BufSchemaRegistryClient createBufRegistryClient(KafkaCluster cluster) {
@@ -68,7 +77,8 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     return this.schemaRegistryAwareRecordSerDe.deserialize(msg);
   }
 
-  @Nullable ProtoSchema protoSchemaFromHeaders(Headers headers) {
+  @Nullable
+  ProtoSchema protoSchemaFromHeaders(Headers headers) {
     // extract PROTOBUF_TYPE header
     String fullyQualifiedTypeName = null;
     for (Header header : headers.headers("PROTOBUF_TYPE")) {
@@ -91,7 +101,8 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     return ret;
   }
 
-  @Nullable ProtoSchema protoSchemaFromTopic(String topic) {
+  @Nullable
+  ProtoSchema protoSchemaFromTopic(String topic) {
     if (!topic.contains(".proto.")) {
       return null;
     }
@@ -103,11 +114,44 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     return ret;
   }
 
+  private DeserializedKeyValue deserializeProtobuf(ConsumerRecord<Bytes, Bytes> msg, ProtoSchema schema) {
+    // TODO schema registry aware serde deserialize if descriptor not found
+    try {
+      var builder = DeserializedKeyValue.builder();
+      if (msg.key() != null) {
+        builder.key(new String(msg.key().get()));
+        builder.keyFormat(MessageFormat.UNKNOWN);
+      }
+      if (msg.value() != null) {
+        builder.value(parse(msg.value().get(), getDescriptor(msg.topic())));
+        builder.valueFormat(MessageFormat.PROTOBUF);
+      }
+      return builder.build();
+    } catch (Throwable e) {
+      throw new RuntimeException("Failed to parse record from topic " + msg.topic(), e);
+    }
+  }
+
+  // TODO: Get descriptor from cache or Buf
+  private Descriptor getDescriptor(String topic) {
+    return messageDescriptorMap.get(topic);
+  }
+
+  // TODO: Shared code
+  @SneakyThrows
+  private String parse(byte[] value, Descriptor descriptor) {
+    DynamicMessage protoMsg = DynamicMessage.parseFrom(
+        descriptor,
+        new ByteArrayInputStream(value));
+    byte[] jsonFromProto = ProtobufSchemaUtils.toJson(protoMsg);
+    return new String(jsonFromProto);
+  }
+
   @Override
   public ProducerRecord<byte[], byte[]> serialize(String topic,
-                                                  @Nullable String key,
-                                                  @Nullable String data,
-                                                  @Nullable Integer partition) {
+      @Nullable String key,
+      @Nullable String data,
+      @Nullable Integer partition) {
     return this.schemaRegistryAwareRecordSerDe.serialize(topic, key, data, partition);
   }
 
