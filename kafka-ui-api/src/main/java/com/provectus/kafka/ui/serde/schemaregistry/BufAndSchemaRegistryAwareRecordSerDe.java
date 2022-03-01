@@ -61,16 +61,26 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   public DeserializedKeyValue deserialize(ConsumerRecord<Bytes, Bytes> msg) {
     ProtoSchema protoSchema = protoSchemaFromHeaders(msg.headers());
     if (protoSchema != null) {
-      // TODO: parse message
-      log.info("Skipping buf for schema: {}", protoSchema.getFullyQualifiedTypeName());
+      Descriptor descriptor = getDescriptor(protoSchema.getFullyQualifiedTypeName());
+
+      if (descriptor != null) {
+        return this.deserializeProtobuf(msg, descriptor);
+      }
+
+      log.info("Skipping buf for topic {} with schema {}", msg.topic(), protoSchema.getFullyQualifiedTypeName());
       return this.schemaRegistryAwareRecordSerDe.deserialize(msg);
     }
 
     protoSchema = protoSchemaFromTopic(msg.topic());
 
     if (protoSchema != null) {
-      // TODO: parse message and return it
-      log.info("Skipping buf for schema: {}", protoSchema.getFullyQualifiedTypeName());
+      Descriptor descriptor = getDescriptor(protoSchema.getFullyQualifiedTypeName());
+
+      if (descriptor != null) {
+        return this.deserializeProtobuf(msg, descriptor);
+      }
+
+      log.info("Skipping buf for topic {} with schema {}", msg.topic(), protoSchema.getFullyQualifiedTypeName());
       return this.schemaRegistryAwareRecordSerDe.deserialize(msg);
     }
 
@@ -114,7 +124,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     return ret;
   }
 
-  private DeserializedKeyValue deserializeProtobuf(ConsumerRecord<Bytes, Bytes> msg, ProtoSchema schema) {
+  private DeserializedKeyValue deserializeProtobuf(ConsumerRecord<Bytes, Bytes> msg, Descriptor descriptor) {
     // TODO schema registry aware serde deserialize if descriptor not found
     try {
       var builder = DeserializedKeyValue.builder();
@@ -123,7 +133,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
         builder.keyFormat(MessageFormat.UNKNOWN);
       }
       if (msg.value() != null) {
-        builder.value(parse(msg.value().get(), getDescriptor(msg.topic())));
+        builder.value(parse(msg.value().get(), descriptor));
         builder.valueFormat(MessageFormat.PROTOBUF);
       }
       return builder.build();
@@ -133,8 +143,9 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   }
 
   // TODO: Get descriptor from cache or Buf
-  private Descriptor getDescriptor(String topic) {
-    return messageDescriptorMap.get(topic);
+  @Nullable
+  private Descriptor getDescriptor(String fullyQualifiedTypeName) {
+    return messageDescriptorMap.get(fullyQualifiedTypeName);
   }
 
   // TODO: Shared code
