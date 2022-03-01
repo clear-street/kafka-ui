@@ -1,5 +1,9 @@
 # Clear Street Proto with Buf
 
+## Prerequisite
+
+Install [Buf](https://docs.buf.build/installation).
+
 ## Goal
 
 At Clear Street, protobuf on Kafka is enabled with some special Kafka Headers or topic names.

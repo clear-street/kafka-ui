@@ -4,6 +4,6 @@ managed:
   java_package_prefix: com.provectus.kafka.ui.proto.gen
 plugins:
   - remote: buf.build/protocolbuffers/plugins/java:v3.19.3-1
-    out: kafka-ui-proto-gen/src/main/java
+    out: src/main/java
   - remote: buf.build/grpc/plugins/java:v1.44.1-1
-    out: kafka-ui-proto-gen/src/main/java
+    out: src/main/java
