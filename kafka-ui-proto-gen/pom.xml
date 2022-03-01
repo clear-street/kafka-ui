@@ -56,7 +56,7 @@
                             <executable>buf</executable>
                             <arguments>
                                 <argument>generate</argument>
-                                <argument>buf.build/bufbuild/buf</argument>
+                                <argument>buf.build/bufbuild/buf:68da9dcf7ad819b7725e798deaf9ced5fe782e0f</argument>
                             </arguments>
                         </configuration>
                     </execution>
