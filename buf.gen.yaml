@@ -1,4 +1,7 @@
 version: v1
+managed:
+  enabled: true
+  java_package_prefix: com.provectus
 plugins:
   - remote: buf.build/protocolbuffers/plugins/java:v3.19.3-1
     out: proto-gen
