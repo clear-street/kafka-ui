@@ -35,7 +35,7 @@ public class KafkaCluster {
 
   // clst specific
   private final String bufRegistry;
-  private final String bufUsername;
+  private final String bufPort;
   private final String bufApiToken;
   // clst specific
 }

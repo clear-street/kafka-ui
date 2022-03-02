@@ -32,12 +32,13 @@ import org.junit.jupiter.api.Test;
 class BufAndSchemaRegistryAwareRecordSerDeTest {
 
   private final SchemaRegistryClient registryClient = mock(SchemaRegistryClient.class);
+  private final BufSchemaRegistryClient bufClient = mock(BufSchemaRegistryClient.class);
 
   private final BufAndSchemaRegistryAwareRecordSerDe serde = new BufAndSchemaRegistryAwareRecordSerDe(
       KafkaCluster.builder().build(),
       registryClient,
-      new BufSchemaRegistryClient()
-  );
+      bufClient);
+  // new BufSchemaRegistryClient("", 0, ""));
 
   @Nested
   class Deserialize {
@@ -59,8 +60,7 @@ class BufAndSchemaRegistryAwareRecordSerDeTest {
               + "      \"type\": \"int\""
               + "    }"
               + "  ]"
-              + "}"
-      );
+              + "}");
 
       String jsonValueForSchema = "{ \"field1\":\"testStr\", \"field2\": 123 }";
 
@@ -73,9 +73,7 @@ class BufAndSchemaRegistryAwareRecordSerDeTest {
               1,
               100,
               Bytes.wrap("key".getBytes()),
-              bytesWithMagicByteAndSchemaId(schemaId, jsonToAvro(jsonValueForSchema, schema))
-          )
-      );
+              bytesWithMagicByteAndSchemaId(schemaId, jsonToAvro(jsonValueForSchema, schema))));
 
       // called twice: once by serde code, once by formatter (will be cached)
       verify(registryClient, times(2)).getSchemaById(schemaId);
@@ -91,13 +89,12 @@ class BufAndSchemaRegistryAwareRecordSerDeTest {
 
     @Test
     void callsBufFormatterWhenValueHasCorrectHeader() throws Exception {
-      ConsumerRecord<Bytes, Bytes> record =  new ConsumerRecord<>(
+      ConsumerRecord<Bytes, Bytes> record = new ConsumerRecord<>(
           "test-topic",
           1,
           100,
           Bytes.wrap("key".getBytes()),
-          Bytes.wrap("value".getBytes())
-      );
+          Bytes.wrap("value".getBytes()));
       record.headers().add("PROTOBUF_TYPE", "protobuf_type".getBytes());
       var result = serde.deserialize(record);
 
@@ -113,13 +110,12 @@ class BufAndSchemaRegistryAwareRecordSerDeTest {
 
     @Test
     void callsBufFormatterWhenTopicIsCorrect() throws Exception {
-      ConsumerRecord<Bytes, Bytes> record =  new ConsumerRecord<>(
+      ConsumerRecord<Bytes, Bytes> record = new ConsumerRecord<>(
           "test-topic.proto.foo",
           1,
           100,
           Bytes.wrap("key".getBytes()),
-          Bytes.wrap("value".getBytes())
-      );
+          Bytes.wrap("value".getBytes()));
       var result = serde.deserialize(record);
 
       // verify schema registry was skipped
@@ -134,13 +130,12 @@ class BufAndSchemaRegistryAwareRecordSerDeTest {
 
     @Test
     void testProtoSchemaCorrectFromHeaders() throws Exception {
-      ConsumerRecord<Bytes, Bytes> record =  new ConsumerRecord<>(
+      ConsumerRecord<Bytes, Bytes> record = new ConsumerRecord<>(
           "test-topic",
           1,
           100,
           Bytes.wrap("key".getBytes()),
-          Bytes.wrap("value".getBytes())
-      );
+          Bytes.wrap("value".getBytes()));
       record.headers().add("PROTOBUF_TYPE", "protobuf_type.foo.v1.bar".getBytes());
       record.headers().add("PROTOBUF_SCHEMA_ID", "schema_id".getBytes());
       ProtoSchema protoSchema = serde.protoSchemaFromHeaders(record.headers());
@@ -174,8 +169,7 @@ class BufAndSchemaRegistryAwareRecordSerDeTest {
               .put((byte) 0)
               .putInt(schemaId)
               .put(body)
-              .array()
-      );
+              .array());
     }
   }
 

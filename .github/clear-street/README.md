@@ -17,7 +17,7 @@ Use these settings to set up the Buf connection:
 
 ```yaml
 bufRegistry: https://<url>
-bufUsername: <user>
+bufPort: <port>
 bufApiToken: <token>
 ```
 

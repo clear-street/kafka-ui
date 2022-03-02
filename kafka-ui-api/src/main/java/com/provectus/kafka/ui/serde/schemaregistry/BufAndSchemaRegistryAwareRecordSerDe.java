@@ -54,7 +54,9 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
   private static BufSchemaRegistryClient createBufRegistryClient(KafkaCluster cluster) {
     // TODO: pass args from cluster to buf constructor
-    return new BufSchemaRegistryClient();
+    return new BufSchemaRegistryClient(cluster.getBufRegistry(),
+        Integer.parseInt(cluster.getBufPort()),
+        cluster.getBufApiToken());
   }
 
   @Override
@@ -145,7 +147,8 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   // TODO: Get descriptor from cache or Buf
   @Nullable
   private Descriptor getDescriptor(String fullyQualifiedTypeName) {
-    return messageDescriptorMap.get(fullyQualifiedTypeName);
+    return bufClient.getDescriptor("fleet", "gibraltar", fullyQualifiedTypeName);
+    // return messageDescriptorMap.get(fullyQualifiedTypeName);
   }
 
   // TODO: Shared code
