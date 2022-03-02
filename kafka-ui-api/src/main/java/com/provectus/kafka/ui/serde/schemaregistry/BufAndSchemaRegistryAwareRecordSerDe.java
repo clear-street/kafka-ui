@@ -44,12 +44,16 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       KafkaCluster cluster,
       SchemaRegistryClient schemaRegistryClient,
       BufSchemaRegistryClient bufClient) {
+    log.info("made it here B");
     if (schemaRegistryClient == null) {
       this.schemaRegistryAwareRecordSerDe = new SchemaRegistryAwareRecordSerDe(cluster);
     } else {
       // used for testing
       this.schemaRegistryAwareRecordSerDe = new SchemaRegistryAwareRecordSerDe(cluster, schemaRegistryClient);
     }
+
+    log.info("made it here C");
+
     this.bufClient = bufClient;
 
     this.bufDefaultOwner = cluster.getBufDefaultOwner();
@@ -60,6 +64,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   }
 
   private static BufSchemaRegistryClient createBufRegistryClient(KafkaCluster cluster) {
+    log.info("made it here A {} {} {}", cluster.getBufRegistry(), cluster.getBufPort(), cluster.getBufApiToken());
     return new BufSchemaRegistryClient(cluster.getBufRegistry(),
         Integer.parseInt(cluster.getBufPort()),
         cluster.getBufApiToken());
