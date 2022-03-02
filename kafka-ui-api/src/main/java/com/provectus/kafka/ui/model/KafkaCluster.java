@@ -37,5 +37,7 @@ public class KafkaCluster {
   private final String bufRegistry;
   private final String bufPort;
   private final String bufApiToken;
+  private final String bufDefaultOwner;
+  private final Map<String, String> bufOwnerRepoByProtobufMessageName;
   // clst specific
 }

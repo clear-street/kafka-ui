@@ -27,8 +27,12 @@ import org.apache.kafka.common.utils.Bytes;
 public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
   private final SchemaRegistryAwareRecordSerDe schemaRegistryAwareRecordSerDe;
-  private final KafkaCluster cluster;
   private final BufSchemaRegistryClient bufClient;
+
+  private final String bufDefaultOwner;
+  private final Map<String, String> bufOwnerRepoByProtobufMessageName;
+  private final Map<String, String> protobufMessageNameByTopic;
+
   private final Map<String, Descriptor> messageDescriptorMap;
 
   public BufAndSchemaRegistryAwareRecordSerDe(KafkaCluster cluster) {
@@ -46,14 +50,16 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       // used for testing
       this.schemaRegistryAwareRecordSerDe = new SchemaRegistryAwareRecordSerDe(cluster, schemaRegistryClient);
     }
-    this.cluster = cluster;
     this.bufClient = bufClient;
+
+    this.bufDefaultOwner = cluster.getBufDefaultOwner();
+    this.bufOwnerRepoByProtobufMessageName = cluster.getBufOwnerRepoByProtobufMessageName();
+    this.protobufMessageNameByTopic = cluster.getProtobufMessageNameByTopic();
 
     this.messageDescriptorMap = new HashMap<>();
   }
 
   private static BufSchemaRegistryClient createBufRegistryClient(KafkaCluster cluster) {
-    // TODO: pass args from cluster to buf constructor
     return new BufSchemaRegistryClient(cluster.getBufRegistry(),
         Integer.parseInt(cluster.getBufPort()),
         cluster.getBufApiToken());
@@ -61,31 +67,33 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
   @Override
   public DeserializedKeyValue deserialize(ConsumerRecord<Bytes, Bytes> msg) {
+    String fullyQualifiedTypeName = protobufMessageNameByTopic.get(msg.topic());
+    if (fullyQualifiedTypeName != null) {
+      return deserializeProto(msg, fullyQualifiedTypeName);
+    }
+
     ProtoSchema protoSchema = protoSchemaFromHeaders(msg.headers());
     if (protoSchema != null) {
-      Descriptor descriptor = getDescriptor(protoSchema.getFullyQualifiedTypeName());
-
-      if (descriptor != null) {
-        return this.deserializeProtobuf(msg, descriptor);
-      }
-
-      log.info("Skipping buf for topic {} with schema {}", msg.topic(), protoSchema.getFullyQualifiedTypeName());
-      return this.schemaRegistryAwareRecordSerDe.deserialize(msg);
+      return deserializeProto(msg, protoSchema.getFullyQualifiedTypeName());
     }
 
     protoSchema = protoSchemaFromTopic(msg.topic());
 
     if (protoSchema != null) {
-      Descriptor descriptor = getDescriptor(protoSchema.getFullyQualifiedTypeName());
-
-      if (descriptor != null) {
-        return this.deserializeProtobuf(msg, descriptor);
-      }
-
-      log.info("Skipping buf for topic {} with schema {}", msg.topic(), protoSchema.getFullyQualifiedTypeName());
-      return this.schemaRegistryAwareRecordSerDe.deserialize(msg);
+      return deserializeProto(msg, protoSchema.getFullyQualifiedTypeName());
     }
 
+    return this.schemaRegistryAwareRecordSerDe.deserialize(msg);
+  }
+
+  private DeserializedKeyValue deserializeProto(ConsumerRecord<Bytes, Bytes> msg, String fullyQualifiedTypeName) {
+    Descriptor descriptor = getDescriptor(fullyQualifiedTypeName);
+
+    if (descriptor != null) {
+      return this.deserializeProtobuf(msg, descriptor);
+    }
+
+    log.warn("Skipping buf for topic {} with schema {}", msg.topic(), fullyQualifiedTypeName);
     return this.schemaRegistryAwareRecordSerDe.deserialize(msg);
   }
 
@@ -127,7 +135,6 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   }
 
   private DeserializedKeyValue deserializeProtobuf(ConsumerRecord<Bytes, Bytes> msg, Descriptor descriptor) {
-    // TODO schema registry aware serde deserialize if descriptor not found
     try {
       var builder = DeserializedKeyValue.builder();
       if (msg.key() != null) {
@@ -147,8 +154,33 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   // TODO: Get descriptor from cache or Buf
   @Nullable
   private Descriptor getDescriptor(String fullyQualifiedTypeName) {
-    return bufClient.getDescriptor("fleet", "gibraltar", fullyQualifiedTypeName);
-    // return messageDescriptorMap.get(fullyQualifiedTypeName);
+    String bufOwner = bufDefaultOwner;
+    String bufRepo = "";
+
+    String bufOwnerRepoInfo = bufOwnerRepoByProtobufMessageName.get(fullyQualifiedTypeName);
+
+    if (bufOwnerRepoInfo != null) {
+      String[] parts = bufOwnerRepoInfo.split("/");
+      if (parts.length != 2) {
+        log.error("Cannot parse Buf owner and repo info from {}, make sure it is in the 'owner/repo format'",
+            bufOwnerRepoInfo);
+      } else {
+        bufOwner = parts[0];
+        bufRepo = parts[1];
+      }
+    } else {
+      String[] parts = fullyQualifiedTypeName.split("\\.");
+
+      if (parts.length == 0) {
+        log.warn("Cannot infer Buf repo name from type {}", fullyQualifiedTypeName);
+      } else {
+        bufRepo = parts[0];
+      }
+    }
+
+    log.info("Get descriptor from Buf {}/{}@{}", bufOwner, bufRepo, fullyQualifiedTypeName);
+
+    return bufClient.getDescriptor(bufOwner, bufRepo, fullyQualifiedTypeName);
   }
 
   // TODO: Shared code
