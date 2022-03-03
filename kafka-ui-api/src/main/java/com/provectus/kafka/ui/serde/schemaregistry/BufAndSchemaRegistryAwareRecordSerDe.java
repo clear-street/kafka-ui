@@ -12,8 +12,11 @@ import com.provectus.kafka.ui.serde.RecordSerDe;
 import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
 import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchemaUtils;
 import java.io.ByteArrayInputStream;
+import java.nio.charset.Charset;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +29,18 @@ import org.apache.kafka.common.utils.Bytes;
 @Slf4j
 public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
+  private final Charset UTF8_CHARSET = Charset.forName("UTF-8");
+
+  private class CachedDescriptor {
+    final Date timeCached;
+    final Descriptor descriptor;
+
+    public CachedDescriptor(Date timeCached, Descriptor descriptor) {
+      this.timeCached = timeCached;
+      this.descriptor = descriptor;
+    }
+  }
+
   private final SchemaRegistryAwareRecordSerDe schemaRegistryAwareRecordSerDe;
   private final BufSchemaRegistryClient bufClient;
 
@@ -33,7 +48,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   private final Map<String, String> bufOwnerRepoByProtobufMessageName;
   private final Map<String, String> protobufMessageNameByTopic;
 
-  private final Map<String, Descriptor> messageDescriptorMap;
+  private final Map<String, CachedDescriptor> cachedMssageDescriptorMap;
 
   public BufAndSchemaRegistryAwareRecordSerDe(KafkaCluster cluster) {
     this(cluster, null, createBufRegistryClient(cluster));
@@ -69,7 +84,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       this.protobufMessageNameByTopic = new HashMap<String, String>();
     }
 
-    this.messageDescriptorMap = new HashMap<>();
+    this.cachedMssageDescriptorMap = new HashMap<>();
   }
 
   private static BufSchemaRegistryClient createBufRegistryClient(KafkaCluster cluster) {
@@ -173,9 +188,21 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     }
   }
 
-  // TODO: Get descriptor from cache or Buf
+  private static long getDateDiffMinutes(Date date1, Date date2, TimeUnit timeUnit) {
+    long diffInMillies = date2.getTime() - date1.getTime();
+    return timeUnit.convert(diffInMillies, TimeUnit.MILLISECONDS);
+  }
+
   @Nullable
   private Descriptor getDescriptor(String fullyQualifiedTypeName) {
+    Date currentDate = new Date();
+    CachedDescriptor cachedDescriptor = cachedMssageDescriptorMap.get(fullyQualifiedTypeName);
+    if (cachedDescriptor != null) {
+      if (getDateDiffMinutes(cachedDescriptor.timeCached, currentDate, TimeUnit.MINUTES) < 5) {
+        return cachedDescriptor.descriptor;
+      }
+    }
+
     String bufOwner = bufDefaultOwner;
     String bufRepo = "";
 
@@ -202,7 +229,12 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
     log.info("Get descriptor from Buf {}/{}@{}", bufOwner, bufRepo, fullyQualifiedTypeName);
 
-    return bufClient.getDescriptor(bufOwner, bufRepo, fullyQualifiedTypeName);
+    Descriptor descriptor = bufClient.getDescriptor(bufOwner, bufRepo, fullyQualifiedTypeName);
+
+    cachedDescriptor = new CachedDescriptor(currentDate, descriptor);
+    cachedMssageDescriptorMap.put(fullyQualifiedTypeName, cachedDescriptor);
+
+    return descriptor;
   }
 
   // TODO: Shared code
@@ -212,7 +244,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
         descriptor,
         new ByteArrayInputStream(value));
     byte[] jsonFromProto = ProtobufSchemaUtils.toJson(protoMsg);
-    return new String(jsonFromProto);
+    return new String(jsonFromProto, UTF8_CHARSET);
   }
 
   @Override
