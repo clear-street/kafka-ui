@@ -86,12 +86,12 @@ services:
       SCHEMA_REGISTRY_LOG4J_ROOT_LOGLEVEL: INFO
       SCHEMA_REGISTRY_KAFKASTORE_TOPIC: _schemas
     ports:
-    - 8085:8085
+    - 18085:8085
 
   schemaregistry1:
     image: confluentinc/cp-schema-registry:5.5.0
     ports:
-      - 18085:8085
+      - 28085:8085
     depends_on:
       - zookeeper1
       - kafka1

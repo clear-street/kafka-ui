@@ -44,7 +44,6 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       KafkaCluster cluster,
       SchemaRegistryClient schemaRegistryClient,
       BufSchemaRegistryClient bufClient) {
-    log.info("made it here B");
     if (schemaRegistryClient == null) {
       this.schemaRegistryAwareRecordSerDe = new SchemaRegistryAwareRecordSerDe(cluster);
     } else {
@@ -52,21 +51,37 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       this.schemaRegistryAwareRecordSerDe = new SchemaRegistryAwareRecordSerDe(cluster, schemaRegistryClient);
     }
 
-    log.info("made it here C");
-
     this.bufClient = bufClient;
 
-    this.bufDefaultOwner = cluster.getBufDefaultOwner();
-    this.bufOwnerRepoByProtobufMessageName = cluster.getBufOwnerRepoByProtobufMessageName();
-    this.protobufMessageNameByTopic = cluster.getProtobufMessageNameByTopic();
+    if (cluster.getBufDefaultOwner() != null) {
+      this.bufDefaultOwner = cluster.getBufDefaultOwner();
+    } else {
+      this.bufDefaultOwner = "";
+    }
+    if (cluster.getBufOwnerRepoByProtobufMessageName() != null) {
+      this.bufOwnerRepoByProtobufMessageName = cluster.getBufOwnerRepoByProtobufMessageName();
+    } else {
+      this.bufOwnerRepoByProtobufMessageName = new HashMap<String, String>();
+    }
+    if (cluster.getProtobufMessageNameByTopic() != null) {
+      this.protobufMessageNameByTopic = cluster.getProtobufMessageNameByTopic();
+    } else {
+      this.protobufMessageNameByTopic = new HashMap<String, String>();
+    }
 
     this.messageDescriptorMap = new HashMap<>();
   }
 
   private static BufSchemaRegistryClient createBufRegistryClient(KafkaCluster cluster) {
-    log.info("made it here A {} {} {}", cluster.getBufRegistry(), cluster.getBufPort(), cluster.getBufApiToken());
+    int port = 443;
+    try {
+      port = Integer.parseInt(cluster.getBufPort());
+    } catch (NumberFormatException e) {
+      log.error("Could not parse buf port {} {}", cluster.getBufPort(), e);
+    }
+
     return new BufSchemaRegistryClient(cluster.getBufRegistry(),
-        Integer.parseInt(cluster.getBufPort()),
+        port,
         cluster.getBufApiToken());
   }
 
@@ -88,6 +103,8 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       return deserializeProto(msg, protoSchema.getFullyQualifiedTypeName());
     }
 
+    log.info("No proto schema found, skipping buf for topic {}", msg.topic());
+
     return this.schemaRegistryAwareRecordSerDe.deserialize(msg);
   }
 
@@ -98,7 +115,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       return this.deserializeProtobuf(msg, descriptor);
     }
 
-    log.warn("Skipping buf for topic {} with schema {}", msg.topic(), fullyQualifiedTypeName);
+    log.warn("Not descriptor found, skipping buf for topic {} with schema {}", msg.topic(), fullyQualifiedTypeName);
     return this.schemaRegistryAwareRecordSerDe.deserialize(msg);
   }
 
