@@ -122,12 +122,12 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       valueType = protoSchemaFromTopic.getFullyQualifiedTypeName();
     }
 
-    ProtoSchema protoSchemaForKeyFromHeader = protoSchemaFromHeaders(msg.headers());
+    ProtoSchema protoSchemaForKeyFromHeader = protoValueSchemaFromHeaders(msg.headers());
     if (protoSchemaForKeyFromHeader != null) {
       keyType = protoSchemaForKeyFromHeader.getFullyQualifiedTypeName();
     }
 
-    ProtoSchema protoSchemaFromHeader = protoSchemaForKeyFromHeaders(msg.headers());
+    ProtoSchema protoSchemaFromHeader = protoKeySchemaFromHeaders(msg.headers());
     if (protoSchemaFromHeader != null) {
       valueType = protoSchemaFromHeader.getFullyQualifiedTypeName();
     }
@@ -174,10 +174,10 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   }
 
   @Nullable
-  ProtoSchema protoSchemaFromHeaders(Headers headers) {
-    // Get PROTOBUF_TYPE header.
+  ProtoSchema protoKeySchemaFromHeaders(Headers headers) {
+    // Get PROTOBUF_TYPE_KEY header.
     String fullyQualifiedTypeName = null;
-    for (Header header : headers.headers("PROTOBUF_TYPE")) {
+    for (Header header : headers.headers("PROTOBUF_TYPE_KEY")) {
       fullyQualifiedTypeName = new String(header.value());
     }
 
@@ -191,10 +191,10 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   }
 
   @Nullable
-  ProtoSchema protoSchemaForKeyFromHeaders(Headers headers) {
-    // Get PROTOBUF_TYPE_KEY header.
+  ProtoSchema protoValueSchemaFromHeaders(Headers headers) {
+    // Get PROTOBUF_TYPE_VALUE header.
     String fullyQualifiedTypeName = null;
-    for (Header header : headers.headers("PROTOBUF_TYPE_KEY")) {
+    for (Header header : headers.headers("PROTOBUF_TYPE_VALUE")) {
       fullyQualifiedTypeName = new String(header.value());
     }
 

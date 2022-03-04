@@ -131,11 +131,13 @@ class BufAndSchemaRegistryAwareRecordSerDeTest {
           100,
           Bytes.wrap("key".getBytes()),
           Bytes.wrap("value".getBytes()));
-      record.headers().add("PROTOBUF_TYPE", "protobuf_type.foo.v1.bar".getBytes());
+      record.headers().add("PROTOBUF_TYPE_KEY", "protobuf_type.foo.v1.bar".getBytes());
+      record.headers().add("PROTOBUF_TYPE_VALUE", "protobuf_type.dead.v1.beef".getBytes());
       record.headers().add("PROTOBUF_SCHEMA_ID", "schema_id".getBytes());
-      ProtoSchema protoSchema = serde.protoSchemaFromHeaders(record.headers());
-      assertThat(protoSchema.getFullyQualifiedTypeName()).isEqualTo("protobuf_type.foo.v1.bar");
-      assertThat(protoSchema.getSchemaID()).isEqualTo("schema_id");
+      ProtoSchema protoSchemaKey = serde.protoKeySchemaFromHeaders(record.headers());
+      ProtoSchema protoSchemaValue = serde.protoValueSchemaFromHeaders(record.headers());
+      assertThat(protoSchemaKey.getFullyQualifiedTypeName()).isEqualTo("protobuf_type.foo.v1.bar");
+      assertThat(protoSchemaValue.getFullyQualifiedTypeName()).isEqualTo("protobuf_type.dead.v1.beef");
     }
 
     @Test
