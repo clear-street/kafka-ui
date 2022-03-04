@@ -163,7 +163,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     }
 
     Descriptor valueDescriptor = null;
-    if (valueDescriptor != null) {
+    if (valueFullyQualifiedType != null) {
       valueDescriptor = getDescriptor(valueFullyQualifiedType);
       if (valueDescriptor == null) {
         log.warn("No value descriptor found for topic {} with schema {}", msg.topic(), valueFullyQualifiedType);
