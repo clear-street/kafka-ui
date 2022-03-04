@@ -22,6 +22,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
+import lombok.Data;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -35,14 +36,10 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
   private final Charset utf8Charset = Charset.forName("UTF-8");
 
+  @Data
   private class CachedDescriptor {
-    final Date timeCached;
-    final Descriptor descriptor;
-
-    public CachedDescriptor(Date timeCached, Descriptor descriptor) {
-      this.timeCached = timeCached;
-      this.descriptor = descriptor;
-    }
+    Date timeCached;
+    Descriptor descriptor;
   }
 
   private final SchemaRegistryAwareRecordSerDe schemaRegistryAwareRecordSerDe;
@@ -261,8 +258,8 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     CachedDescriptor cachedDescriptor = cachedMssageDescriptorMap.get(fullyQualifiedTypeName);
     if (cachedDescriptor != null) {
       // TODO: Make the cache time configurable
-      if (getDateDiffMinutes(cachedDescriptor.timeCached, currentDate, TimeUnit.MINUTES) < 5) {
-        return cachedDescriptor.descriptor;
+      if (getDateDiffMinutes(cachedDescriptor.getTimeCached(), currentDate, TimeUnit.MINUTES) < 5) {
+        return cachedDescriptor.getDescriptor();
       }
     }
 
