@@ -14,6 +14,7 @@ import com.provectus.kafka.ui.serde.RecordSerDe;
 import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
 import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchemaUtils;
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.Date;
 import java.util.HashMap;
@@ -241,7 +242,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
         }
       }
       return builder.build();
-    } catch (Throwable e) {
+    } catch (IOException e) {
       throw new RuntimeException("Failed to parse record from topic " + msg.topic(), e);
     }
   }
@@ -296,8 +297,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     return descriptor;
   }
 
-  @SneakyThrows
-  private String parse(byte[] value, Descriptor descriptor) {
+  private String parse(byte[] value, Descriptor descriptor) throws IOException {
     DynamicMessage protoMsg = DynamicMessage.parseFrom(
         descriptor,
         new ByteArrayInputStream(value));
