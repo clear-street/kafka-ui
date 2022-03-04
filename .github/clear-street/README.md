@@ -16,9 +16,12 @@ Use the [Protobuf on Kafka](https://www.notion.so/clearstreet/Protobuf-on-Kafka-
 Use these settings to set up the Buf connection:
 
 ```yaml
-bufRegistry: https://<url>
+bufRegistry: <url>
 bufPort: <port>
 bufApiToken: <token>
+bufDefaultOwner: <owner>
+bufOwnerRepoByProtobufMessageName:
+    <fully_qualified_type>: "<owner>/<repo>"
 ```
 
 ## Running the application locally
@@ -60,6 +63,12 @@ git clean -xdf
 ```
 
 Then re-run step 2 of Initial Setup.
+
+### Manual Release
+
+Run:
+- `mvn clean package -Pprod -DskipTests`
+- `docker build -t <IMAGE> --build-arg JAR_FILE=kafka-ui-api-0.0.1-SNAPSHOT.jar`
 
 ## Implementation
 
