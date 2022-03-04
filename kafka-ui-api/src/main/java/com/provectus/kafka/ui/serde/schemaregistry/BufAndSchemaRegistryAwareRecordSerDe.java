@@ -66,7 +66,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     if (schemaRegistryClient == null) {
       this.schemaRegistryAwareRecordSerDe = new SchemaRegistryAwareRecordSerDe(cluster);
     } else {
-      // used for testing
+      // Used for testing.
       this.schemaRegistryAwareRecordSerDe = new SchemaRegistryAwareRecordSerDe(cluster, schemaRegistryClient);
     }
 
@@ -104,6 +104,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
         cluster.getBufApiToken());
   }
 
+  // TODO: Add support for protobuf key deserialization.
   @Override
   public DeserializedKeyValue deserialize(ConsumerRecord<Bytes, Bytes> msg) {
     String fullyQualifiedTypeName = protobufMessageNameByTopic.get(msg.topic());
@@ -140,7 +141,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
   @Nullable
   ProtoSchema protoSchemaFromHeaders(Headers headers) {
-    // extract PROTOBUF_TYPE header
+    // Get PROTOBUF_TYPE header.
     String fullyQualifiedTypeName = null;
     for (Header header : headers.headers("PROTOBUF_TYPE")) {
       fullyQualifiedTypeName = new String(header.value());
@@ -150,15 +151,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       return null;
     }
 
-    // extract PROTOBUF_SCHEMA_ID header
-    String schemaID = null;
-    for (Header header : headers.headers("PROTOBUF_SCHEMA_ID")) {
-      schemaID = new String(header.value());
-    }
-
-    ProtoSchema ret = new ProtoSchema();
     ret.setFullyQualifiedTypeName(fullyQualifiedTypeName);
-    ret.setSchemaID(schemaID);
     return ret;
   }
 
@@ -168,7 +161,8 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       return null;
     }
 
-    // extract fqtn
+    // Extract the fully qualified type name from the topic.
+    // E.g., my-topic.proto.service.v1.User -> service.v1.User.
     String[] parts = topic.split("\\.proto\\.");
     ProtoSchema ret = new ProtoSchema();
     ret.setFullyQualifiedTypeName(parts[parts.length - 1]);
@@ -202,6 +196,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     Date currentDate = new Date();
     CachedDescriptor cachedDescriptor = cachedMssageDescriptorMap.get(fullyQualifiedTypeName);
     if (cachedDescriptor != null) {
+      // TODO: Make the cache time configurable
       if (getDateDiffMinutes(cachedDescriptor.timeCached, currentDate, TimeUnit.MINUTES) < 5) {
         return cachedDescriptor.descriptor;
       }
