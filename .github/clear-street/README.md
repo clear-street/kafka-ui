@@ -22,6 +22,10 @@ bufApiToken: <token>
 bufDefaultOwner: <owner>
 bufOwnerRepoByProtobufMessageName:
     <fully_qualified_type>: "<owner>/<repo>"
+protobufMessageNameByTopic:
+    <topic>: <fully qualified type>
+protobufKeyMessageNameByTopic:
+    <topic>: <fully qualified type>
 ```
 
 ## Running the application locally

@@ -51,6 +51,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   private final String bufDefaultOwner;
   private final Map<String, String> bufOwnerRepoByProtobufMessageName;
   private final Map<String, String> protobufMessageNameByTopic;
+  private final Map<String, String> protobufKeyMessageNameByTopic;
 
   private final Map<String, CachedDescriptor> cachedMssageDescriptorMap;
 
@@ -87,6 +88,11 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     } else {
       this.protobufMessageNameByTopic = new HashMap<String, String>();
     }
+    if (cluster.getProtobufKeyMessageNameByTopic() != null) {
+      this.protobufKeyMessageNameByTopic = cluster.getProtobufKeyMessageNameByTopic();
+    } else {
+      this.protobufKeyMessageNameByTopic = new HashMap<String, String>();
+    }
 
     this.cachedMssageDescriptorMap = new HashMap<>();
   }
@@ -104,23 +110,40 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
         cluster.getBufApiToken());
   }
 
-  // TODO: Add support for protobuf key deserialization.
   @Override
   public DeserializedKeyValue deserialize(ConsumerRecord<Bytes, Bytes> msg) {
-    String fullyQualifiedTypeName = protobufMessageNameByTopic.get(msg.topic());
-    if (fullyQualifiedTypeName != null) {
-      return deserializeProto(msg, fullyQualifiedTypeName);
+    String keyType = null;
+    String valueType = null;
+
+    ProtoSchema protoSchemaFromTopic = protoSchemaFromTopic(msg.topic());
+
+    if (protoSchemaFromTopic != null) {
+      keyType = protoSchemaFromTopic.getFullyQualifiedTypeName();
+      valueType = protoSchemaFromTopic.getFullyQualifiedTypeName();
     }
 
-    ProtoSchema protoSchema = protoSchemaFromHeaders(msg.headers());
-    if (protoSchema != null) {
-      return deserializeProto(msg, protoSchema.getFullyQualifiedTypeName());
+    ProtoSchema protoSchemaForKeyFromHeader = protoSchemaFromHeaders(msg.headers());
+    if (protoSchemaForKeyFromHeader != null) {
+      keyType = protoSchemaForKeyFromHeader.getFullyQualifiedTypeName();
     }
 
-    protoSchema = protoSchemaFromTopic(msg.topic());
+    ProtoSchema protoSchemaFromHeader = protoSchemaForKeyFromHeaders(msg.headers());
+    if (protoSchemaFromHeader != null) {
+      valueType = protoSchemaFromHeader.getFullyQualifiedTypeName();
+    }
 
-    if (protoSchema != null) {
-      return deserializeProto(msg, protoSchema.getFullyQualifiedTypeName());
+    String keyTypeFromConfig = protobufKeyMessageNameByTopic.get(msg.topic());
+    if (keyTypeFromConfig != null) {
+      keyType = keyTypeFromConfig;
+    }
+
+    String valueTypeFromConfig = protobufMessageNameByTopic.get(msg.topic());
+    if (valueTypeFromConfig != null) {
+      valueType = valueTypeFromConfig;
+    }
+
+    if (valueType != null) {
+      return deserializeProto(msg, keyType, valueType);
     }
 
     log.info("No proto schema found, skipping buf for topic {}", msg.topic());
@@ -128,15 +151,26 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     return this.schemaRegistryAwareRecordSerDe.deserialize(msg);
   }
 
-  private DeserializedKeyValue deserializeProto(ConsumerRecord<Bytes, Bytes> msg, String fullyQualifiedTypeName) {
-    Descriptor descriptor = getDescriptor(fullyQualifiedTypeName);
-
-    if (descriptor != null) {
-      return this.deserializeProtobuf(msg, descriptor);
+  private DeserializedKeyValue deserializeProto(ConsumerRecord<Bytes, Bytes> msg,
+        String keyFullyQualifiedType,
+        String valueFullyQualifiedType) {
+    Descriptor keyDescriptor = null;
+    if (keyFullyQualifiedType != null) {
+      keyDescriptor = getDescriptor(keyFullyQualifiedType);
+      if (keyDescriptor == null) {
+        log.warn("No key descriptor found for topic {} with schema {}", msg.topic(), keyFullyQualifiedType);
+      }
     }
 
-    log.warn("No descriptor found, skipping buf for topic {} with schema {}", msg.topic(), fullyQualifiedTypeName);
-    return this.schemaRegistryAwareRecordSerDe.deserialize(msg);
+    Descriptor valueDescriptor = null;
+    if (valueDescriptor != null) {
+      valueDescriptor = getDescriptor(valueFullyQualifiedType);
+      if (keyDescriptor == null) {
+        log.warn("No value descriptor found for topic {} with schema {}", msg.topic(), valueFullyQualifiedType);
+      }
+    }
+
+    return this.deserializeProtobuf(msg, keyDescriptor, valueDescriptor);
   }
 
   @Nullable
@@ -151,6 +185,24 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       return null;
     }
 
+    ProtoSchema ret = new ProtoSchema();
+    ret.setFullyQualifiedTypeName(fullyQualifiedTypeName);
+    return ret;
+  }
+
+  @Nullable
+  ProtoSchema protoSchemaForKeyFromHeaders(Headers headers) {
+    // Get PROTOBUF_TYPE_KEY header.
+    String fullyQualifiedTypeName = null;
+    for (Header header : headers.headers("PROTOBUF_TYPE_KEY")) {
+      fullyQualifiedTypeName = new String(header.value());
+    }
+
+    if (fullyQualifiedTypeName == null) {
+      return null;
+    }
+
+    ProtoSchema ret = new ProtoSchema();
     ret.setFullyQualifiedTypeName(fullyQualifiedTypeName);
     return ret;
   }
@@ -169,16 +221,28 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     return ret;
   }
 
-  private DeserializedKeyValue deserializeProtobuf(ConsumerRecord<Bytes, Bytes> msg, Descriptor descriptor) {
+  private DeserializedKeyValue deserializeProtobuf(ConsumerRecord<Bytes, Bytes> msg,
+        Descriptor keyDescriptor,
+        Descriptor valueDescriptor) {
     try {
       var builder = DeserializedKeyValue.builder();
       if (msg.key() != null) {
-        builder.key(new String(msg.key().get()));
-        builder.keyFormat(MessageFormat.UNKNOWN);
+        if (keyDescriptor != null) {
+          builder.key(parse(msg.key().get(), keyDescriptor));
+          builder.keyFormat(MessageFormat.PROTOBUF);
+        } else {
+          builder.key(new String(msg.key().get()));
+          builder.keyFormat(MessageFormat.UNKNOWN);
+        }
       }
       if (msg.value() != null) {
-        builder.value(parse(msg.value().get(), descriptor));
-        builder.valueFormat(MessageFormat.PROTOBUF);
+        if (valueDescriptor != null) {
+          builder.value(parse(msg.value().get(), valueDescriptor));
+          builder.valueFormat(MessageFormat.PROTOBUF);
+        } else {
+          builder.value(new String(msg.value().get()));
+          builder.valueFormat(MessageFormat.UNKNOWN);
+        }
       }
       return builder.build();
     } catch (Throwable e) {

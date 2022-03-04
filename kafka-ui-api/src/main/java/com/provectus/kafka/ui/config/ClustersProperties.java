@@ -47,6 +47,7 @@ public class ClustersProperties {
     String bufApiToken;
     String bufDefaultOwner;
     Map<String, String> bufOwnerRepoByProtobufMessageName;
+    Map<String, String> protobufKeyMessageNameByTopic;
     // clst specific
   }
 

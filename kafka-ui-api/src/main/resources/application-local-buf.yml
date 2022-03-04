@@ -18,6 +18,9 @@ kafka:
       protobufMessageNameByTopic:
         topic.1: fully.qualified.type.1
         topic.2: fully.qualified.type.2
+      protobufKeyMessageNameByTopic:
+        topic.1: fully.qualified.type.1
+        topic.2: fully.qualified.type.2
 spring:
   jmx:
     enabled: true
