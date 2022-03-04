@@ -56,7 +56,6 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     this(cluster, null, createBufRegistryClient(cluster));
   }
 
-  @VisibleForTesting
   public BufAndSchemaRegistryAwareRecordSerDe(
       KafkaCluster cluster,
       SchemaRegistryClient schemaRegistryClient,
