@@ -19,6 +19,7 @@ Use these settings to set up the Buf connection:
 bufRegistry: <url>
 bufPort: <port>
 bufApiToken: <token>
+bufRegistryCacheDurtionSeconds: <seconds>
 bufDefaultOwner: <owner>
 bufOwnerRepoByProtobufMessageName:
     <fully_qualified_type>: "<owner>/<repo>"

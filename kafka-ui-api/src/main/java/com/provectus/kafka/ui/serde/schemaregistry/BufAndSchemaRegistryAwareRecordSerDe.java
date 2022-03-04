@@ -52,6 +52,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   private final Map<String, String> protobufKeyMessageNameByTopic;
 
   private final Map<String, CachedDescriptor> cachedMssageDescriptorMap;
+  private final int cachedMessageDescriptorRetensionSeconds;
 
   public BufAndSchemaRegistryAwareRecordSerDe(KafkaCluster cluster) {
     this(cluster, null, createBufRegistryClient(cluster));
@@ -70,6 +71,11 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
     this.bufClient = bufClient;
 
+    if (cluster.getBufRegistryCacheDurtionSeconds() != null) {
+      this.cachedMessageDescriptorRetensionSeconds = cluster.getBufRegistryCacheDurtionSeconds();
+    } else {
+      this.cachedMessageDescriptorRetensionSeconds = 300;
+    }
     if (cluster.getBufDefaultOwner() != null) {
       this.bufDefaultOwner = cluster.getBufDefaultOwner();
     } else {
@@ -92,18 +98,13 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     }
 
     this.cachedMssageDescriptorMap = new HashMap<>();
+
+    log.info("Will cache descriptors from buf for {} seconds", this.cachedMessageDescriptorRetensionSeconds);
   }
 
   private static BufSchemaRegistryClient createBufRegistryClient(KafkaCluster cluster) {
-    int port = 443;
-    try {
-      port = Integer.parseInt(cluster.getBufPort());
-    } catch (NumberFormatException e) {
-      log.error("Could not parse buf port, defaulting to 443 {} {}", cluster.getBufPort(), e);
-    }
-
     return new BufSchemaRegistryClient(cluster.getBufRegistry(),
-        port,
+        cluster.getBufPort(),
         cluster.getBufApiToken());
   }
 
@@ -257,8 +258,8 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     Date currentDate = new Date();
     CachedDescriptor cachedDescriptor = cachedMssageDescriptorMap.get(fullyQualifiedTypeName);
     if (cachedDescriptor != null) {
-      // TODO: Make the cache time configurable
-      if (getDateDiffMinutes(cachedDescriptor.getTimeCached(), currentDate, TimeUnit.MINUTES) < 5) {
+      if (getDateDiffMinutes(cachedDescriptor.getTimeCached(), currentDate, TimeUnit.SECONDS)
+          < cachedMessageDescriptorRetensionSeconds) {
         return cachedDescriptor.getDescriptor();
       }
     }
