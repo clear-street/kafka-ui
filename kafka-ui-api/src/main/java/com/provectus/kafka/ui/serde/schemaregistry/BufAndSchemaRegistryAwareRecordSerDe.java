@@ -38,8 +38,8 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
   @Data
   private class CachedDescriptor {
-    Date timeCached;
-    Descriptor descriptor;
+    final Date timeCached;
+    final Descriptor descriptor;
   }
 
   private final SchemaRegistryAwareRecordSerDe schemaRegistryAwareRecordSerDe;
@@ -99,7 +99,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     try {
       port = Integer.parseInt(cluster.getBufPort());
     } catch (NumberFormatException e) {
-      log.error("Could not parse buf port {} {}", cluster.getBufPort(), e);
+      log.error("Could not parse buf port, defaulting to 443 {} {}", cluster.getBufPort(), e);
     }
 
     return new BufSchemaRegistryClient(cluster.getBufRegistry(),
@@ -143,7 +143,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       return deserializeProto(msg, keyType, valueType);
     }
 
-    log.info("No proto schema found, skipping buf for topic {}", msg.topic());
+    log.debug("No proto schema found, skipping buf for topic {}", msg.topic());
 
     return this.schemaRegistryAwareRecordSerDe.deserialize(msg);
   }
