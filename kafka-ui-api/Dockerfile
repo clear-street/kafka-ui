@@ -1,17 +1,14 @@
-# FROM alpine:3.15.0
-#FROM adoptopenjdk/openjdk13:jre-13.0.2_8-debian
 FROM openjdk:13.0.2-jdk-buster
 
-#RUN apk add --no-cache openjdk13-jre libc6-compat gcompat \
-#&& addgroup -S kafkaui && adduser -S kafkaui -G kafkaui
+RUN addgroup --system kafkaui && adduser --system kafkaui --ingroup kafkaui
 
-# USER kafkaui
+USER kafkaui
 
 ARG JAR_FILE
 COPY "/target/${JAR_FILE}" "/kafka-ui-api.jar"
 
 ENV JAVA_OPTS=
 
-# EXPOSE 8080
+EXPOSE 8080
 
 CMD java $JAVA_OPTS -jar kafka-ui-api.jar
