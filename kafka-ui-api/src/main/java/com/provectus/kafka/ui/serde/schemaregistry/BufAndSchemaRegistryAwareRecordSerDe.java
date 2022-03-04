@@ -134,7 +134,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       return this.deserializeProtobuf(msg, descriptor);
     }
 
-    log.warn("Not descriptor found, skipping buf for topic {} with schema {}", msg.topic(), fullyQualifiedTypeName);
+    log.warn("No descriptor found, skipping buf for topic {} with schema {}", msg.topic(), fullyQualifiedTypeName);
     return this.schemaRegistryAwareRecordSerDe.deserialize(msg);
   }
 
@@ -187,7 +187,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
         builder.valueFormat(MessageFormat.PROTOBUF);
       }
       return builder.build();
-    } catch (java.io.IOException e) {
+    } catch (Throwable e) {
       throw new RuntimeException("Failed to parse record from topic " + msg.topic(), e);
     }
   }
