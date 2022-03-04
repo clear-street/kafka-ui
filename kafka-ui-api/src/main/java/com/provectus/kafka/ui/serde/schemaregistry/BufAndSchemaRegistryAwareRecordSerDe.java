@@ -3,6 +3,8 @@ package com.provectus.kafka.ui.serde.schemaregistry;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.DynamicMessage;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.util.JsonFormat;
 import com.provectus.kafka.ui.client.BufSchemaRegistryClient;
 import com.provectus.kafka.ui.model.KafkaCluster;
 import com.provectus.kafka.ui.model.MessageSchemaDTO;
@@ -16,6 +18,8 @@ import java.nio.charset.Charset;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import lombok.SneakyThrows;
@@ -29,7 +33,7 @@ import org.apache.kafka.common.utils.Bytes;
 @Slf4j
 public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
-  private final Charset UTF8_CHARSET = Charset.forName("UTF-8");
+  private final Charset utf8Charset = Charset.forName("UTF-8");
 
   private class CachedDescriptor {
     final Date timeCached;
@@ -183,7 +187,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
         builder.valueFormat(MessageFormat.PROTOBUF);
       }
       return builder.build();
-    } catch (Throwable e) {
+    } catch (java.io.IOException e) {
       throw new RuntimeException("Failed to parse record from topic " + msg.topic(), e);
     }
   }
@@ -211,7 +215,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     if (bufOwnerRepoInfo != null) {
       String[] parts = bufOwnerRepoInfo.split("/");
       if (parts.length != 2) {
-        log.error("Cannot parse Buf owner and repo info from {}, make sure it is in the 'owner/repo format'",
+        log.error("Cannot parse Buf owner and repo info from {}, make sure it is in the 'owner/repo' format",
             bufOwnerRepoInfo);
       } else {
         bufOwner = parts[0];
@@ -237,14 +241,13 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     return descriptor;
   }
 
-  // TODO: Shared code
   @SneakyThrows
   private String parse(byte[] value, Descriptor descriptor) {
     DynamicMessage protoMsg = DynamicMessage.parseFrom(
         descriptor,
         new ByteArrayInputStream(value));
     byte[] jsonFromProto = ProtobufSchemaUtils.toJson(protoMsg);
-    return new String(jsonFromProto, UTF8_CHARSET);
+    return new String(jsonFromProto, utf8Charset);
   }
 
   @Override
@@ -252,16 +255,43 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       @Nullable String key,
       @Nullable String data,
       @Nullable Integer partition) {
-    return this.schemaRegistryAwareRecordSerDe.serialize(topic, key, data, partition);
+    if (data == null) {
+      return new ProducerRecord<>(topic, partition, Objects.requireNonNull(key).getBytes(), null);
+    }
+
+    ProtoSchema protoSchema = protoSchemaFromTopic(topic);
+    if (protoSchema == null) {
+      throw new RuntimeException("Could not infer proto schema from topic " + topic);
+    }
+
+    Descriptor descriptor = getDescriptor(protoSchema.getFullyQualifiedTypeName());
+    if (descriptor == null) {
+      throw new RuntimeException("Could not get descriptor for " + protoSchema.getFullyQualifiedTypeName());
+    }
+
+    DynamicMessage.Builder builder = DynamicMessage.newBuilder(descriptor);
+
+    DynamicMessage message;
+    try {
+      JsonFormat.parser().merge(data, builder);
+      message = builder.build();
+    } catch (InvalidProtocolBufferException e) {
+      throw new RuntimeException("Failed to merge record for topic " + topic, e);
+    }
+
+    return new ProducerRecord<>(
+        topic,
+        partition,
+        Optional.ofNullable(key).map(String::getBytes).orElse(null),
+        message.toByteArray());
   }
 
   @Override
   public TopicMessageSchemaDTO getTopicSchema(String topic) {
-    // TODO: what is the importance of this?
     final MessageSchemaDTO schema = new MessageSchemaDTO()
-        .name("unknown")
+        .name("Unknown")
         .source(MessageSchemaDTO.SourceEnum.UNKNOWN)
-        .schema("CLST_PROTOBUF");
+        .schema("");
     return new TopicMessageSchemaDTO()
         .key(schema)
         .value(schema);
