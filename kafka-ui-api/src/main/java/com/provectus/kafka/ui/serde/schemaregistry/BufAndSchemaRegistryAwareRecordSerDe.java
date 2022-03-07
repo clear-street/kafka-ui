@@ -84,17 +84,17 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     if (cluster.getBufOwnerRepoByProtobufMessageName() != null) {
       this.bufOwnerRepoByProtobufMessageName = cluster.getBufOwnerRepoByProtobufMessageName();
     } else {
-      this.bufOwnerRepoByProtobufMessageName = new HashMap<String, String>();
+      this.bufOwnerRepoByProtobufMessageName = new HashMap<>();
     }
     if (cluster.getProtobufMessageNameByTopic() != null) {
       this.protobufMessageNameByTopic = cluster.getProtobufMessageNameByTopic();
     } else {
-      this.protobufMessageNameByTopic = new HashMap<String, String>();
+      this.protobufMessageNameByTopic = new HashMap<>();
     }
     if (cluster.getProtobufKeyMessageNameByTopic() != null) {
       this.protobufKeyMessageNameByTopic = cluster.getProtobufKeyMessageNameByTopic();
     } else {
-      this.protobufKeyMessageNameByTopic = new HashMap<String, String>();
+      this.protobufKeyMessageNameByTopic = new HashMap<>();
     }
 
     this.cachedMessageDescriptorMap = new HashMap<>();

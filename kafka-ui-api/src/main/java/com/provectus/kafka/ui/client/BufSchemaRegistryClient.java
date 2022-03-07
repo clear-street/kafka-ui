@@ -1,7 +1,5 @@
 package com.provectus.kafka.ui.client;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
 import com.google.protobuf.DescriptorProtos.FileDescriptorSet;
 import com.google.protobuf.Descriptors.Descriptor;
@@ -17,6 +15,7 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.MetadataUtils;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -74,17 +73,17 @@ public class BufSchemaRegistryClient {
       return null;
     }
 
-    ImmutableMap.Builder<String, FileDescriptorProto> descriptorProtoIndexBuilder = ImmutableMap.builder();
+    Map<String, FileDescriptorProto> descriptorProtoIndexBuilder = new HashMap<>();
 
     for (int i = 0; i < fileDescriptorSet.getFileCount(); i++) {
       FileDescriptorProto p = fileDescriptorSet.getFile(i);
       descriptorProtoIndexBuilder.put(p.getName(), p);
     }
 
-    ImmutableMap<String, FileDescriptorProto> descriptorProtoIndex = descriptorProtoIndexBuilder.build();
-    Map<String, FileDescriptor> descriptorCache = new HashMap<String, FileDescriptor>();
+    Map<String, FileDescriptorProto> descriptorProtoIndex = new HashMap<>();
+    final Map<String, FileDescriptor> descriptorCache = new HashMap<>();
 
-    HashMap<String, FileDescriptor> allFileDescriptors = new HashMap<String, FileDescriptor>();
+    final Map<String, FileDescriptor> allFileDescriptors = new HashMap<>();
     try {
       for (int i = 0; i < fileDescriptorSet.getFileCount(); i++) {
         FileDescriptor desc = descriptorFromProto(fileDescriptorSet.getFile(i), descriptorProtoIndex, descriptorCache);
@@ -117,7 +116,7 @@ public class BufSchemaRegistryClient {
   // https://github.com/grpc-swagger/grpc-swagger/blob/master/grpc-swagger-core/src/main/java/io/grpc/grpcswagger/grpc/ServiceResolver.java#L118.
   private FileDescriptor descriptorFromProto(
       FileDescriptorProto descriptorProto,
-      ImmutableMap<String, FileDescriptorProto> descriptorProtoIndex,
+      Map<String, FileDescriptorProto> descriptorProtoIndex,
       Map<String, FileDescriptor> descriptorCache) throws DescriptorValidationException {
     // First, check the cache.
     String descriptorName = descriptorProto.getName();
@@ -126,7 +125,7 @@ public class BufSchemaRegistryClient {
     }
 
     // Then, fetch all the required dependencies recursively.
-    ImmutableList.Builder<FileDescriptor> dependencies = ImmutableList.builder();
+    List<FileDescriptor> dependencies = new ArrayList<>();
     for (String dependencyName : descriptorProto.getDependencyList()) {
       if (!descriptorProtoIndex.containsKey(dependencyName)) {
         throw new IllegalArgumentException("Could not find dependency: " + dependencyName);
@@ -137,6 +136,6 @@ public class BufSchemaRegistryClient {
 
     // Finally, construct the actual descriptor.
     FileDescriptor[] empty = new FileDescriptor[0];
-    return FileDescriptor.buildFrom(descriptorProto, dependencies.build().toArray(empty));
+    return FileDescriptor.buildFrom(descriptorProto, dependencies.toArray(empty));
   }
 }
