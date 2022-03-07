@@ -51,8 +51,8 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   private final Map<String, String> protobufMessageNameByTopic;
   private final Map<String, String> protobufKeyMessageNameByTopic;
 
-  private final Map<String, CachedDescriptor> cachedMssageDescriptorMap;
-  private final int cachedMessageDescriptorRetensionSeconds;
+  private final Map<String, CachedDescriptor> cachedMessageDescriptorMap;
+  private final int cachedMessageDescriptorRetentionSeconds;
 
   public BufAndSchemaRegistryAwareRecordSerDe(KafkaCluster cluster) {
     this(cluster, null, createBufRegistryClient(cluster));
@@ -71,10 +71,10 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
     this.bufClient = bufClient;
 
-    if (cluster.getBufRegistryCacheDurtionSeconds() != null) {
-      this.cachedMessageDescriptorRetensionSeconds = cluster.getBufRegistryCacheDurtionSeconds();
+    if (cluster.getBufRegistryCacheDurationSeconds() != null) {
+      this.cachedMessageDescriptorRetentionSeconds = cluster.getBufRegistryCacheDurationSeconds();
     } else {
-      this.cachedMessageDescriptorRetensionSeconds = 300;
+      this.cachedMessageDescriptorRetentionSeconds = 300;
     }
     if (cluster.getBufDefaultOwner() != null) {
       this.bufDefaultOwner = cluster.getBufDefaultOwner();
@@ -97,9 +97,9 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       this.protobufKeyMessageNameByTopic = new HashMap<String, String>();
     }
 
-    this.cachedMssageDescriptorMap = new HashMap<>();
+    this.cachedMessageDescriptorMap = new HashMap<>();
 
-    log.info("Will cache descriptors from buf for {} seconds", this.cachedMessageDescriptorRetensionSeconds);
+    log.info("Will cache descriptors from buf for {} seconds", this.cachedMessageDescriptorRetentionSeconds);
   }
 
   private static BufSchemaRegistryClient createBufRegistryClient(KafkaCluster cluster) {
@@ -256,10 +256,10 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   @Nullable
   private Descriptor getDescriptor(String fullyQualifiedTypeName) {
     Date currentDate = new Date();
-    CachedDescriptor cachedDescriptor = cachedMssageDescriptorMap.get(fullyQualifiedTypeName);
+    CachedDescriptor cachedDescriptor = cachedMessageDescriptorMap.get(fullyQualifiedTypeName);
     if (cachedDescriptor != null) {
       if (getDateDiffMinutes(cachedDescriptor.getTimeCached(), currentDate, TimeUnit.SECONDS)
-          < cachedMessageDescriptorRetensionSeconds) {
+          < cachedMessageDescriptorRetentionSeconds) {
         return cachedDescriptor.getDescriptor();
       }
     }
@@ -293,7 +293,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     Descriptor descriptor = bufClient.getDescriptor(bufOwner, bufRepo, fullyQualifiedTypeName);
 
     cachedDescriptor = new CachedDescriptor(currentDate, descriptor);
-    cachedMssageDescriptorMap.put(fullyQualifiedTypeName, cachedDescriptor);
+    cachedMessageDescriptorMap.put(fullyQualifiedTypeName, cachedDescriptor);
 
     return descriptor;
   }
