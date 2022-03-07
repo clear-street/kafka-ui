@@ -1,6 +1,7 @@
-FROM openjdk:13.0.2-jdk-buster
+FROM alpine:3.15.0
 
-RUN addgroup --system kafkaui && adduser --system kafkaui --ingroup kafkaui
+RUN apk add --no-cache openjdk13-jre libc6-compat gcompat \
+&& addgroup -S kafkaui && adduser -S kafkaui -G kafkaui
 
 USER kafkaui
 

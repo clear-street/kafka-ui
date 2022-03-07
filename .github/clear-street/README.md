@@ -73,7 +73,7 @@ Then re-run step 2 of Initial Setup.
 
 Run:
 - `mvn clean package -Pprod -DskipTests`
-- `docker build -t <IMAGE> --build-arg JAR_FILE=kafka-ui-api-0.0.1-SNAPSHOT.jar`
+- From `kafka-ui-api` run `docker build -t <IMAGE> --build-arg JAR_FILE=kafka-ui-api-0.0.1-SNAPSHOT.jar -f clst.Dockerfile .`
 
 ## Implementation
 
