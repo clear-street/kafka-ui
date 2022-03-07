@@ -20,6 +20,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import javax.annotation.Nullable;
 import lombok.extern.slf4j.Slf4j;
 
@@ -93,23 +94,22 @@ public class BufSchemaRegistryClient {
       log.error("Failed to create dependencies map {}", e);
     }
 
-    for (FileDescriptor fileDesc : allFileDescriptors.values()) {
-      if (fileDesc.getPackage().equals(packageName)) {
-        Descriptor desc = fileDesc.findMessageTypeByName(typeName);
-        if (desc != null) {
-          return desc;
-        }
-      }
-    }
-
-    return null;
+    return allFileDescriptors.values()
+        .stream()
+        .filter(f -> f.getPackage().equals(packageName))
+        .map(f -> f.findMessageTypeByName(typeName))
+        .filter(Objects::nonNull)
+        .findFirst()
+        .orElse(null);
   }
 
   private Image getImage(String owner, String repo) throws StatusRuntimeException {
-    GetImageRequest request = GetImageRequest.newBuilder().setOwner(owner).setRepository(repo).setReference("main")
-        .build();
-    GetImageResponse response = bufClient.getImage(request);
-    return response.getImage();
+    return bufClient.getImage(GetImageRequest.newBuilder()
+        .setOwner(owner)
+        .setRepository(repo)
+        .setReference("main")
+        .build())
+        .getImage();
   }
 
   // From
