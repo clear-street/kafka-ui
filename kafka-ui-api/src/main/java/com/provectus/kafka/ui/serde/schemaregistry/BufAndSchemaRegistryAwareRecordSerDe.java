@@ -15,7 +15,7 @@ import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
 import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchemaUtils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -34,8 +34,6 @@ import org.apache.kafka.common.utils.Bytes;
 
 @Slf4j
 public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
-
-  private final Charset utf8Charset = Charset.forName("UTF-8");
 
   @Data
   private class CachedDescriptor {
@@ -176,7 +174,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     // Get PROTOBUF_TYPE_KEY header.
     String fullyQualifiedTypeName = null;
     for (Header header : headers.headers("PROTOBUF_TYPE_KEY")) {
-      fullyQualifiedTypeName = new String(header.value());
+      fullyQualifiedTypeName = new String(header.value(), StandardCharsets.UTF_8);
     }
 
     if (fullyQualifiedTypeName == null) {
@@ -193,7 +191,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     // Get PROTOBUF_TYPE_VALUE header.
     String fullyQualifiedTypeName = null;
     for (Header header : headers.headers("PROTOBUF_TYPE_VALUE")) {
-      fullyQualifiedTypeName = new String(header.value());
+      fullyQualifiedTypeName = new String(header.value(), StandardCharsets.UTF_8);
     }
 
     if (fullyQualifiedTypeName == null) {
@@ -229,7 +227,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
           builder.key(parse(msg.key().get(), keyDescriptor));
           builder.keyFormat(MessageFormat.PROTOBUF);
         } else {
-          builder.key(new String(msg.key().get()));
+          builder.key(new String(msg.key().get(), StandardCharsets.UTF_8));
           builder.keyFormat(MessageFormat.UNKNOWN);
         }
       }
@@ -238,7 +236,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
           builder.value(parse(msg.value().get(), valueDescriptor));
           builder.valueFormat(MessageFormat.PROTOBUF);
         } else {
-          builder.value(new String(msg.value().get()));
+          builder.value(new String(msg.value().get(), StandardCharsets.UTF_8));
           builder.valueFormat(MessageFormat.UNKNOWN);
         }
       }
@@ -250,7 +248,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
   private static long getDateDiffMinutes(Date date1, Date date2, TimeUnit timeUnit) {
     long diffInMillis = date2.getTime() - date1.getTime();
-    return timeUnit.convert(diffInMillies, TimeUnit.MILLISECONDS);
+    return timeUnit.convert(diffInMillis, TimeUnit.MILLISECONDS);
   }
 
   @Nullable
@@ -303,7 +301,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
         descriptor,
         new ByteArrayInputStream(value));
     byte[] jsonFromProto = ProtobufSchemaUtils.toJson(protoMsg);
-    return new String(jsonFromProto, utf8Charset);
+    return new String(jsonFromProto, StandardCharsets.UTF_8);
   }
 
   @Override
