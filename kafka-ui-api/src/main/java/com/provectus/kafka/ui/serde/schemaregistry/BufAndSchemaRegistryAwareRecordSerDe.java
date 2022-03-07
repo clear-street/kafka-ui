@@ -249,7 +249,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   }
 
   private static long getDateDiffMinutes(Date date1, Date date2, TimeUnit timeUnit) {
-    long diffInMillies = date2.getTime() - date1.getTime();
+    long diffInMillis = date2.getTime() - date1.getTime();
     return timeUnit.convert(diffInMillies, TimeUnit.MILLISECONDS);
   }
 
