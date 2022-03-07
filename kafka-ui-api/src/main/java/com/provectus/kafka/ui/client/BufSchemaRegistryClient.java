@@ -47,7 +47,7 @@ public class BufSchemaRegistryClient {
   public Descriptor getDescriptor(String owner, String repo, String fullyQualifiedTypeName) {
     List<String> parts = Arrays.asList(fullyQualifiedTypeName.split("\\."));
 
-    if (parts.size() == 0) {
+    if (parts.isEmpty()) {
       log.warn("Cannot get package name and type name from {}", fullyQualifiedTypeName);
       return null;
     }
