@@ -15,6 +15,7 @@ import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
 import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchemaUtils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashMap;
@@ -148,8 +149,8 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   }
 
   private DeserializedKeyValue deserializeProto(ConsumerRecord<Bytes, Bytes> msg,
-        String keyFullyQualifiedType,
-        String valueFullyQualifiedType) {
+      String keyFullyQualifiedType,
+      String valueFullyQualifiedType) {
     Descriptor keyDescriptor = null;
     if (keyFullyQualifiedType != null) {
       keyDescriptor = getDescriptor(keyFullyQualifiedType);
@@ -218,8 +219,8 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   }
 
   private DeserializedKeyValue deserializeProtobuf(ConsumerRecord<Bytes, Bytes> msg,
-        Descriptor keyDescriptor,
-        Descriptor valueDescriptor) {
+      Descriptor keyDescriptor,
+      Descriptor valueDescriptor) {
     try {
       var builder = DeserializedKeyValue.builder();
       if (msg.key() != null) {
@@ -242,7 +243,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       }
       return builder.build();
     } catch (IOException e) {
-      throw new RuntimeException("Failed to parse record from topic " + msg.topic(), e);
+      throw new UncheckedIOException("Failed to parse record from topic " + msg.topic(), e);
     }
   }
 
@@ -256,8 +257,8 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     Date currentDate = new Date();
     CachedDescriptor cachedDescriptor = cachedMessageDescriptorMap.get(fullyQualifiedTypeName);
     if (cachedDescriptor != null) {
-      if (getDateDiffMinutes(cachedDescriptor.getTimeCached(), currentDate, TimeUnit.SECONDS)
-          < cachedMessageDescriptorRetentionSeconds) {
+      if (getDateDiffMinutes(cachedDescriptor.getTimeCached(), currentDate,
+          TimeUnit.SECONDS) < cachedMessageDescriptorRetentionSeconds) {
         return cachedDescriptor.getDescriptor();
       }
     }
@@ -315,12 +316,12 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
     ProtoSchema protoSchema = protoSchemaFromTopic(topic);
     if (protoSchema == null) {
-      throw new RuntimeException("Could not infer proto schema from topic " + topic);
+      throw new IllegalStateException("Could not infer proto schema from topic " + topic);
     }
 
     Descriptor descriptor = getDescriptor(protoSchema.getFullyQualifiedTypeName());
     if (descriptor == null) {
-      throw new RuntimeException("Could not get descriptor for " + protoSchema.getFullyQualifiedTypeName());
+      throw new IllegalArgumentException("Could not get descriptor for " + protoSchema.getFullyQualifiedTypeName());
     }
 
     DynamicMessage.Builder builder = DynamicMessage.newBuilder(descriptor);
@@ -330,7 +331,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       JsonFormat.parser().merge(data, builder);
       message = builder.build();
     } catch (InvalidProtocolBufferException e) {
-      throw new RuntimeException("Failed to merge record for topic " + topic, e);
+      throw new UncheckedIOException("Failed to merge record for topic " + topic, e);
     }
 
     return new ProducerRecord<>(
