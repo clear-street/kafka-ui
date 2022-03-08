@@ -151,7 +151,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   private DeserializedKeyValue deserializeProto(ConsumerRecord<Bytes, Bytes> msg,
       String keyFullyQualifiedType,
       String valueFullyQualifiedType) {
-    Optional<Descriptor> keyDescriptor = null;
+    Optional<Descriptor> keyDescriptor = Optional.empty();
     if (keyFullyQualifiedType != null) {
       keyDescriptor = getDescriptor(keyFullyQualifiedType);
       if (!keyDescriptor.isPresent()) {
@@ -159,7 +159,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       }
     }
 
-    Optional<Descriptor> valueDescriptor = null;
+    Optional<Descriptor> valueDescriptor = Optional.empty();
     if (valueFullyQualifiedType != null) {
       valueDescriptor = getDescriptor(valueFullyQualifiedType);
       if (!valueDescriptor.isPresent()) {
