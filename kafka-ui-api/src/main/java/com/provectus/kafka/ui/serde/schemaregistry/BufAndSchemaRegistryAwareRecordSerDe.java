@@ -1,5 +1,6 @@
 package com.provectus.kafka.ui.serde.schemaregistry;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.DynamicMessage;
@@ -53,20 +54,22 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   private final Map<String, CachedDescriptor> cachedMessageDescriptorMap;
   private final int cachedMessageDescriptorRetentionSeconds;
 
-  public BufAndSchemaRegistryAwareRecordSerDe(KafkaCluster cluster) {
-    this(cluster, null, createBufRegistryClient(cluster));
+  public BufAndSchemaRegistryAwareRecordSerDe(KafkaCluster cluster, ObjectMapper objectMapper) {
+    this(cluster, objectMapper, null, createBufRegistryClient(cluster));
   }
 
   public BufAndSchemaRegistryAwareRecordSerDe(
       KafkaCluster cluster,
+      ObjectMapper objectMapper,
       SchemaRegistryClient schemaRegistryClient,
       BufSchemaRegistryClient bufClient) {
-    if (schemaRegistryClient == null) {
-      this.schemaRegistryAwareRecordSerDe = new SchemaRegistryAwareRecordSerDe(cluster);
-    } else {
-      // Used for testing.
-      this.schemaRegistryAwareRecordSerDe = new SchemaRegistryAwareRecordSerDe(cluster, schemaRegistryClient);
-    }
+    // if (schemaRegistryClient == null) {
+    this.schemaRegistryAwareRecordSerDe = new SchemaRegistryAwareRecordSerDe(cluster, objectMapper);
+    // } else {
+    // Used for testing.
+    // this.schemaRegistryAwareRecordSerDe = new
+    // SchemaRegistryAwareRecordSerDe(cluster, schemaRegistryClient);
+    // }
 
     this.bufClient = bufClient;
 
