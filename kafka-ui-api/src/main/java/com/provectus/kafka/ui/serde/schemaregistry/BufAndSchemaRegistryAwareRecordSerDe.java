@@ -112,21 +112,21 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     String keyType = null;
     String valueType = null;
 
-    ProtoSchema protoSchemaFromTopic = protoSchemaFromTopic(msg.topic());
+    Optional<ProtoSchema> protoSchemaFromTopic = protoSchemaFromTopic(msg.topic());
 
-    if (protoSchemaFromTopic != null) {
-      keyType = protoSchemaFromTopic.getFullyQualifiedTypeName();
-      valueType = protoSchemaFromTopic.getFullyQualifiedTypeName();
+    if (protoSchemaFromTopic.isPresent()) {
+      keyType = protoSchemaFromTopic.get().getFullyQualifiedTypeName();
+      valueType = protoSchemaFromTopic.get().getFullyQualifiedTypeName();
     }
 
-    ProtoSchema protoSchemaForKeyFromHeader = protoValueSchemaFromHeaders(msg.headers());
-    if (protoSchemaForKeyFromHeader != null) {
-      keyType = protoSchemaForKeyFromHeader.getFullyQualifiedTypeName();
+    Optional<ProtoSchema> protoSchemaForKeyFromHeader = protoValueSchemaFromHeaders(msg.headers());
+    if (protoSchemaForKeyFromHeader.isPresent()) {
+      keyType = protoSchemaForKeyFromHeader.get().getFullyQualifiedTypeName();
     }
 
-    ProtoSchema protoSchemaFromHeader = protoKeySchemaFromHeaders(msg.headers());
-    if (protoSchemaFromHeader != null) {
-      valueType = protoSchemaFromHeader.getFullyQualifiedTypeName();
+    Optional<ProtoSchema> protoSchemaFromHeader = protoKeySchemaFromHeaders(msg.headers());
+    if (protoSchemaFromHeader.isPresent()) {
+      valueType = protoSchemaFromHeader.get().getFullyQualifiedTypeName();
     }
 
     String keyTypeFromConfig = protobufKeyMessageNameByTopic.get(msg.topic());
@@ -170,8 +170,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     return this.deserializeProtobuf(msg, keyDescriptor, valueDescriptor);
   }
 
-  @Nullable
-  ProtoSchema protoKeySchemaFromHeaders(Headers headers) {
+  Optional<ProtoSchema> protoKeySchemaFromHeaders(Headers headers) {
     // Get PROTOBUF_TYPE_KEY header.
     String fullyQualifiedTypeName = null;
     for (Header header : headers.headers("PROTOBUF_TYPE_KEY")) {
@@ -179,16 +178,15 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     }
 
     if (fullyQualifiedTypeName == null) {
-      return null;
+      return Optional.empty();
     }
 
     ProtoSchema ret = new ProtoSchema();
     ret.setFullyQualifiedTypeName(fullyQualifiedTypeName);
-    return ret;
+    return Optional.of(ret);
   }
 
-  @Nullable
-  ProtoSchema protoValueSchemaFromHeaders(Headers headers) {
+  Optional<ProtoSchema> protoValueSchemaFromHeaders(Headers headers) {
     // Get PROTOBUF_TYPE_VALUE header.
     String fullyQualifiedTypeName = null;
     for (Header header : headers.headers("PROTOBUF_TYPE_VALUE")) {
@@ -196,18 +194,17 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     }
 
     if (fullyQualifiedTypeName == null) {
-      return null;
+      return Optional.empty();
     }
 
     ProtoSchema ret = new ProtoSchema();
     ret.setFullyQualifiedTypeName(fullyQualifiedTypeName);
-    return ret;
+    return Optional.of(ret);
   }
 
-  @Nullable
-  ProtoSchema protoSchemaFromTopic(String topic) {
+  Optional<ProtoSchema> protoSchemaFromTopic(String topic) {
     if (!topic.contains(".proto.")) {
-      return null;
+      return Optional.empty();
     }
 
     // Extract the fully qualified type name from the topic.
@@ -215,7 +212,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     String[] parts = topic.split("\\.proto\\.");
     ProtoSchema ret = new ProtoSchema();
     ret.setFullyQualifiedTypeName(parts[parts.length - 1]);
-    return ret;
+    return Optional.of(ret);
   }
 
   private DeserializedKeyValue deserializeProtobuf(ConsumerRecord<Bytes, Bytes> msg,
@@ -313,14 +310,15 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       return new ProducerRecord<>(topic, partition, Objects.requireNonNull(key).getBytes(), null);
     }
 
-    ProtoSchema protoSchema = protoSchemaFromTopic(topic);
-    if (protoSchema == null) {
+    Optional<ProtoSchema> protoSchema = protoSchemaFromTopic(topic);
+    if (!protoSchema.isPresent()) {
       throw new IllegalStateException("Could not infer proto schema from topic " + topic);
     }
 
-    Optional<Descriptor> descriptor = getDescriptor(protoSchema.getFullyQualifiedTypeName());
+    Optional<Descriptor> descriptor = getDescriptor(protoSchema.get().getFullyQualifiedTypeName());
     if (!descriptor.isPresent()) {
-      throw new IllegalArgumentException("Could not get descriptor for " + protoSchema.getFullyQualifiedTypeName());
+      throw new IllegalArgumentException("Could not get descriptor for "
+          + protoSchema.get().getFullyQualifiedTypeName());
     }
 
     DynamicMessage.Builder builder = DynamicMessage.newBuilder(descriptor.get());

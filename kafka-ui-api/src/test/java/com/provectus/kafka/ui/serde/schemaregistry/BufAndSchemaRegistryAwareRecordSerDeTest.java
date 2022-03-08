@@ -134,15 +134,15 @@ class BufAndSchemaRegistryAwareRecordSerDeTest {
       record.headers().add("PROTOBUF_TYPE_KEY", "protobuf_type.foo.v1.bar".getBytes());
       record.headers().add("PROTOBUF_TYPE_VALUE", "protobuf_type.dead.v1.beef".getBytes());
       record.headers().add("PROTOBUF_SCHEMA_ID", "schema_id".getBytes());
-      ProtoSchema protoSchemaKey = serde.protoKeySchemaFromHeaders(record.headers());
-      ProtoSchema protoSchemaValue = serde.protoValueSchemaFromHeaders(record.headers());
+      ProtoSchema protoSchemaKey = serde.protoKeySchemaFromHeaders(record.headers()).get();
+      ProtoSchema protoSchemaValue = serde.protoValueSchemaFromHeaders(record.headers()).get();
       assertThat(protoSchemaKey.getFullyQualifiedTypeName()).isEqualTo("protobuf_type.foo.v1.bar");
       assertThat(protoSchemaValue.getFullyQualifiedTypeName()).isEqualTo("protobuf_type.dead.v1.beef");
     }
 
     @Test
     void testProtoSchemaCorrectFromTopic() throws Exception {
-      ProtoSchema protoSchema = serde.protoSchemaFromTopic("test-topic.proto.v1.foo.bar");
+      ProtoSchema protoSchema = serde.protoSchemaFromTopic("test-topic.proto.v1.foo.bar").get();
       assertThat(protoSchema.getFullyQualifiedTypeName()).isEqualTo("v1.foo.bar");
     }
 
