@@ -39,7 +39,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   @Data
   private class CachedDescriptor {
     final Date timeCached;
-    final Descriptor descriptor;
+    final Optional<Descriptor> descriptor;
   }
 
   private final SchemaRegistryAwareRecordSerDe schemaRegistryAwareRecordSerDe;
@@ -151,18 +151,18 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   private DeserializedKeyValue deserializeProto(ConsumerRecord<Bytes, Bytes> msg,
       String keyFullyQualifiedType,
       String valueFullyQualifiedType) {
-    Descriptor keyDescriptor = null;
+    Optional<Descriptor> keyDescriptor = null;
     if (keyFullyQualifiedType != null) {
       keyDescriptor = getDescriptor(keyFullyQualifiedType);
-      if (keyDescriptor == null) {
+      if (!keyDescriptor.isPresent()) {
         log.warn("No key descriptor found for topic {} with schema {}", msg.topic(), keyFullyQualifiedType);
       }
     }
 
-    Descriptor valueDescriptor = null;
+    Optional<Descriptor> valueDescriptor = null;
     if (valueFullyQualifiedType != null) {
       valueDescriptor = getDescriptor(valueFullyQualifiedType);
-      if (valueDescriptor == null) {
+      if (!valueDescriptor.isPresent()) {
         log.warn("No value descriptor found for topic {} with schema {}", msg.topic(), valueFullyQualifiedType);
       }
     }
@@ -219,13 +219,13 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   }
 
   private DeserializedKeyValue deserializeProtobuf(ConsumerRecord<Bytes, Bytes> msg,
-      Descriptor keyDescriptor,
-      Descriptor valueDescriptor) {
+      Optional<Descriptor> keyDescriptor,
+      Optional<Descriptor> valueDescriptor) {
     try {
       var builder = DeserializedKeyValue.builder();
       if (msg.key() != null) {
-        if (keyDescriptor != null) {
-          builder.key(parse(msg.key().get(), keyDescriptor));
+        if (keyDescriptor.isPresent()) {
+          builder.key(parse(msg.key().get(), keyDescriptor.get()));
           builder.keyFormat(MessageFormat.PROTOBUF);
         } else {
           builder.key(new String(msg.key().get(), StandardCharsets.UTF_8));
@@ -233,8 +233,8 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
         }
       }
       if (msg.value() != null) {
-        if (valueDescriptor != null) {
-          builder.value(parse(msg.value().get(), valueDescriptor));
+        if (valueDescriptor.isPresent()) {
+          builder.value(parse(msg.value().get(), valueDescriptor.get()));
           builder.valueFormat(MessageFormat.PROTOBUF);
         } else {
           builder.value(new String(msg.value().get(), StandardCharsets.UTF_8));
@@ -252,8 +252,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     return timeUnit.convert(diffInMillis, TimeUnit.MILLISECONDS);
   }
 
-  @Nullable
-  private Descriptor getDescriptor(String fullyQualifiedTypeName) {
+  private Optional<Descriptor> getDescriptor(String fullyQualifiedTypeName) {
     Date currentDate = new Date();
     CachedDescriptor cachedDescriptor = cachedMessageDescriptorMap.get(fullyQualifiedTypeName);
     if (cachedDescriptor != null) {
@@ -289,7 +288,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
     log.info("Get descriptor from Buf {}/{}@{}", bufOwner, bufRepo, fullyQualifiedTypeName);
 
-    Descriptor descriptor = bufClient.getDescriptor(bufOwner, bufRepo, fullyQualifiedTypeName);
+    Optional<Descriptor> descriptor = bufClient.getDescriptor(bufOwner, bufRepo, fullyQualifiedTypeName);
 
     cachedDescriptor = new CachedDescriptor(currentDate, descriptor);
     cachedMessageDescriptorMap.put(fullyQualifiedTypeName, cachedDescriptor);
@@ -319,12 +318,12 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       throw new IllegalStateException("Could not infer proto schema from topic " + topic);
     }
 
-    Descriptor descriptor = getDescriptor(protoSchema.getFullyQualifiedTypeName());
-    if (descriptor == null) {
+    Optional<Descriptor> descriptor = getDescriptor(protoSchema.getFullyQualifiedTypeName());
+    if (!descriptor.isPresent()) {
       throw new IllegalArgumentException("Could not get descriptor for " + protoSchema.getFullyQualifiedTypeName());
     }
 
-    DynamicMessage.Builder builder = DynamicMessage.newBuilder(descriptor);
+    DynamicMessage.Builder builder = DynamicMessage.newBuilder(descriptor.get());
 
     DynamicMessage message;
     try {

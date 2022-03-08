@@ -21,7 +21,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import javax.annotation.Nullable;
+import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -43,13 +43,12 @@ public class BufSchemaRegistryClient {
     bufClient = bufClient.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(headers));
   }
 
-  @Nullable
-  public Descriptor getDescriptor(String owner, String repo, String fullyQualifiedTypeName) {
+  public Optional<Descriptor> getDescriptor(String owner, String repo, String fullyQualifiedTypeName) {
     List<String> parts = Arrays.asList(fullyQualifiedTypeName.split("\\."));
 
     if (parts.isEmpty()) {
       log.warn("Cannot get package name and type name from {}", fullyQualifiedTypeName);
-      return null;
+      return Optional.empty();
     }
 
     String packageName = String.join(".", parts.subList(0, parts.size() - 1));
@@ -63,7 +62,7 @@ public class BufSchemaRegistryClient {
       image = getImage(owner, repo);
     } catch (StatusRuntimeException e) {
       log.error("Failed to get image {}", e);
-      return null;
+      return Optional.empty();
     }
 
     FileDescriptorSet fileDescriptorSet;
@@ -71,7 +70,7 @@ public class BufSchemaRegistryClient {
       fileDescriptorSet = FileDescriptorSet.parseFrom(image.toByteArray());
     } catch (InvalidProtocolBufferException e) {
       log.error("Failed to parse Image into FileDescriptorSet {}", e);
-      return null;
+      return Optional.empty();
     }
 
     Map<String, FileDescriptorProto> descriptorProtoIndex = new HashMap<>();
@@ -93,13 +92,13 @@ public class BufSchemaRegistryClient {
       log.error("Failed to create dependencies map {}", e);
     }
 
-    return allFileDescriptors.values()
+    return Optional.ofNullable(allFileDescriptors.values()
         .stream()
         .filter(f -> f.getPackage().equals(packageName))
         .map(f -> f.findMessageTypeByName(typeName))
         .filter(Objects::nonNull)
         .findFirst()
-        .orElse(null);
+        .orElse(null));
   }
 
   private Image getImage(String owner, String repo) throws StatusRuntimeException {
