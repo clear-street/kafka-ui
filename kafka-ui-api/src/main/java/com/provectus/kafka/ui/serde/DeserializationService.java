@@ -2,6 +2,7 @@ package com.provectus.kafka.ui.serde;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.provectus.kafka.ui.model.KafkaCluster;
+import com.provectus.kafka.ui.serde.schemaregistry.BufAndSchemaRegistryAwareRecordSerDe;
 import com.provectus.kafka.ui.serde.schemaregistry.SchemaRegistryAwareRecordSerDe;
 import com.provectus.kafka.ui.service.ClustersStorage;
 import java.util.Map;
@@ -20,14 +21,12 @@ public class DeserializationService {
   private final ObjectMapper objectMapper;
   private Map<String, RecordSerDe> clusterDeserializers;
 
-
   @PostConstruct
   public void init() {
     this.clusterDeserializers = clustersStorage.getKafkaClusters().stream()
         .collect(Collectors.toMap(
             KafkaCluster::getName,
-            this::createRecordDeserializerForCluster
-        ));
+            this::createRecordDeserializerForCluster));
   }
 
   private RecordSerDe createRecordDeserializerForCluster(KafkaCluster cluster) {
@@ -35,8 +34,15 @@ public class DeserializationService {
       if (cluster.getProtobufFile() != null) {
         log.info("Using ProtobufFileRecordSerDe for cluster '{}'", cluster.getName());
         return new ProtobufFileRecordSerDe(cluster.getProtobufFile(),
-            cluster.getProtobufMessageNameByTopic(), cluster.getProtobufMessageName(),
-            objectMapper);
+            cluster.getProtobufMessageNameByTopic(), cluster.getProtobufMessageName());
+        // clst specific
+      } else if ((cluster.getSchemaRegistry() != null) && (cluster.getBufRegistry() != null)) {
+        log.info("Using BufAndSchemaRegistryAwareRecordSerDe for cluster '{}'", cluster.getName());
+        return new BufAndSchemaRegistryAwareRecordSerDe(cluster);
+        // clst specific
+      } else if (cluster.getSchemaRegistry() != null) {
+        log.info("Using SchemaRegistryAwareRecordSerDe for cluster '{}'", cluster.getName());
+        return new SchemaRegistryAwareRecordSerDe(cluster);
       } else {
         log.info("Using SchemaRegistryAwareRecordSerDe for cluster '{}'", cluster.getName());
         return new SchemaRegistryAwareRecordSerDe(cluster, objectMapper);
