@@ -74,14 +74,13 @@ public class BufSchemaRegistryClient {
       return null;
     }
 
-    Map<String, FileDescriptorProto> descriptorProtoIndexBuilder = new HashMap<>();
+    Map<String, FileDescriptorProto> descriptorProtoIndex = new HashMap<>();
 
     for (int i = 0; i < fileDescriptorSet.getFileCount(); i++) {
       FileDescriptorProto p = fileDescriptorSet.getFile(i);
-      descriptorProtoIndexBuilder.put(p.getName(), p);
+      descriptorProtoIndex.put(p.getName(), p);
     }
 
-    Map<String, FileDescriptorProto> descriptorProtoIndex = new HashMap<>();
     final Map<String, FileDescriptor> descriptorCache = new HashMap<>();
 
     final Map<String, FileDescriptor> allFileDescriptors = new HashMap<>();
