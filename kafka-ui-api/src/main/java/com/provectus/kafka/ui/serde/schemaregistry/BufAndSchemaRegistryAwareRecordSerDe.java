@@ -140,7 +140,6 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     }
 
     if (keyType != null || valueType != null) {
-      log.info("using {} {}", keyType, valueType);
       return deserializeProto(msg, keyType, valueType);
     }
 
