@@ -21,6 +21,7 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -295,7 +296,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   }
 
   private Optional<Descriptor> getDescriptor(String fullyQualifiedTypeName) {
-    if (fullyQualifiedTypeName == googleProtobufAnyType) {
+    if (fullyQualifiedTypeName.equals(googleProtobufAnyType)) {
       return Optional.of(Any.getDescriptor());
     }
 
@@ -309,14 +310,15 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     }
 
     Optional<BufRepoInfo> bufRepoInfo = getBufRepoInfo(fullyQualifiedTypeName);
-    if (bufRepoInfo.empty()) {
+    if (bufRepoInfo.isEmpty()) {
       log.error("could not get Buf repo info for {}", fullyQualifiedTypeName);
       return Optional.empty();
     }
 
-    log.info("Get descriptor from Buf {}/{}@{}", bufRepoInfo.getOwner(), bufRepoInfo.getRepo(), fullyQualifiedTypeName);
+    log.info("Get descriptor from Buf {}/{}@{}", bufRepoInfo.get().getOwner(), bufRepoInfo.get().getRepo(),
+        fullyQualifiedTypeName);
 
-    Optional<Descriptor> descriptor = bufClient.getDescriptor(bufRepoInfo.getOwner(), bufRepoInfo.getRepo(),
+    Optional<Descriptor> descriptor = bufClient.getDescriptor(bufRepoInfo.get().getOwner(), bufRepoInfo.get().getRepo(),
         fullyQualifiedTypeName);
 
     cachedDescriptor = new CachedDescriptor(currentDate, descriptor);
@@ -349,7 +351,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
      */
 
     try {
-      if (descriptor.getFullName() == googleProtobufAnyType) {
+      if (descriptor.getFullName().equals(googleProtobufAnyType)) {
         Any anyMsg = Any.parseFrom(value);
 
         // Get the fully qualified type name from a URL like
