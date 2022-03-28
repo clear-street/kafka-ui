@@ -89,7 +89,13 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     this.bufClient = bufClient;
 
     if (cluster.getBufRegistryCacheDurationSeconds() != null) {
-      this.cachedMessageDescriptorRetentionSeconds = cluster.getBufRegistryCacheDurationSeconds();
+      int cacheSeconds = cluster.getBufRegistryCacheDurationSeconds();
+      if (cacheSeconds == 0) {
+        log.warn("Buf registry cache duration seconds must be greater than 0, setting to 300");
+        this.cachedMessageDescriptorRetentionSeconds = 300;
+      } else {
+        this.cachedMessageDescriptorRetentionSeconds = cacheSeconds;
+      }
     } else {
       this.cachedMessageDescriptorRetentionSeconds = 300;
     }
