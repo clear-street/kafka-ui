@@ -2,7 +2,9 @@ package com.provectus.kafka.ui.serde.schemaregistry;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.protobuf.Any;
 import com.google.protobuf.Descriptors.Descriptor;
+import com.google.protobuf.Descriptors.FileDescriptor;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
@@ -20,6 +22,7 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -43,6 +46,18 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     final Optional<Descriptor> descriptor;
   }
 
+  @Data
+  private class CachedTypeRegistry {
+    final Date timeCached;
+    final Optional<JsonFormat.TypeRegistry> typeRegistry;
+  }
+
+  @Data
+  private class BufRepoInfo {
+    final String owner;
+    final String repo;
+  }
+
   private final SchemaRegistryAwareRecordSerDe schemaRegistryAwareRecordSerDe;
   private final BufSchemaRegistryClient bufClient;
 
@@ -52,7 +67,10 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   private final Map<String, String> protobufKeyMessageNameByTopic;
 
   private final Map<String, CachedDescriptor> cachedMessageDescriptorMap;
+  private final Map<String, CachedTypeRegistry> cachedTypeRegistryMap;
   private final int cachedMessageDescriptorRetentionSeconds;
+
+  private final String googleProtobufAnyType = "google.protobuf.Any";
 
   public BufAndSchemaRegistryAwareRecordSerDe(KafkaCluster cluster, ObjectMapper objectMapper) {
     this(cluster, objectMapper, null, createBufRegistryClient(cluster));
@@ -74,7 +92,13 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     this.bufClient = bufClient;
 
     if (cluster.getBufRegistryCacheDurationSeconds() != null) {
-      this.cachedMessageDescriptorRetentionSeconds = cluster.getBufRegistryCacheDurationSeconds();
+      int cacheSeconds = cluster.getBufRegistryCacheDurationSeconds();
+      if (cacheSeconds == 0) {
+        log.warn("Buf registry cache duration seconds must be greater than 0, setting to 300");
+        this.cachedMessageDescriptorRetentionSeconds = 300;
+      } else {
+        this.cachedMessageDescriptorRetentionSeconds = cacheSeconds;
+      }
     } else {
       this.cachedMessageDescriptorRetentionSeconds = 300;
     }
@@ -100,6 +124,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     }
 
     this.cachedMessageDescriptorMap = new HashMap<>();
+    this.cachedTypeRegistryMap = new HashMap<>();
 
     log.info("Will cache descriptors from buf for {} seconds", this.cachedMessageDescriptorRetentionSeconds);
   }
@@ -225,30 +250,26 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   private DeserializedKeyValue deserializeProtobuf(ConsumerRecord<Bytes, Bytes> msg,
       Optional<Descriptor> keyDescriptor,
       Optional<Descriptor> valueDescriptor) {
-    try {
-      var builder = DeserializedKeyValue.builder();
-      if (msg.key() != null) {
-        if (keyDescriptor.isPresent()) {
-          builder.key(parse(msg.key().get(), keyDescriptor.get()));
-          builder.keyFormat(MessageFormat.PROTOBUF);
-        } else {
-          builder.key(new String(msg.key().get(), StandardCharsets.UTF_8));
-          builder.keyFormat(MessageFormat.UNKNOWN);
-        }
+    var builder = DeserializedKeyValue.builder();
+    if (msg.key() != null) {
+      if (keyDescriptor.isPresent()) {
+        builder.key(parse(msg.key().get(), keyDescriptor.get()));
+        builder.keyFormat(MessageFormat.PROTOBUF);
+      } else {
+        builder.key(new String(msg.key().get(), StandardCharsets.UTF_8));
+        builder.keyFormat(MessageFormat.UNKNOWN);
       }
-      if (msg.value() != null) {
-        if (valueDescriptor.isPresent()) {
-          builder.value(parse(msg.value().get(), valueDescriptor.get()));
-          builder.valueFormat(MessageFormat.PROTOBUF);
-        } else {
-          builder.value(new String(msg.value().get(), StandardCharsets.UTF_8));
-          builder.valueFormat(MessageFormat.UNKNOWN);
-        }
-      }
-      return builder.build();
-    } catch (IOException e) {
-      throw new UncheckedIOException("Failed to parse record from topic " + msg.topic(), e);
     }
+    if (msg.value() != null) {
+      if (valueDescriptor.isPresent()) {
+        builder.value(parse(msg.value().get(), valueDescriptor.get()));
+        builder.valueFormat(MessageFormat.PROTOBUF);
+      } else {
+        builder.value(new String(msg.value().get(), StandardCharsets.UTF_8));
+        builder.valueFormat(MessageFormat.UNKNOWN);
+      }
+    }
+    return builder.build();
   }
 
   private static long getDateDiffMinutes(Date date1, Date date2, TimeUnit timeUnit) {
@@ -256,16 +277,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     return timeUnit.convert(diffInMillis, TimeUnit.MILLISECONDS);
   }
 
-  private Optional<Descriptor> getDescriptor(String fullyQualifiedTypeName) {
-    Date currentDate = new Date();
-    CachedDescriptor cachedDescriptor = cachedMessageDescriptorMap.get(fullyQualifiedTypeName);
-    if (cachedDescriptor != null) {
-      if (getDateDiffMinutes(cachedDescriptor.getTimeCached(), currentDate,
-          TimeUnit.SECONDS) < cachedMessageDescriptorRetentionSeconds) {
-        return cachedDescriptor.getDescriptor();
-      }
-    }
-
+  private Optional<BufRepoInfo> getBufRepoInfo(String fullyQualifiedTypeName) {
     String bufOwner = bufDefaultOwner;
     String bufRepo = "";
 
@@ -277,8 +289,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
         log.error("Cannot parse Buf owner and repo info from {}, make sure it is in the 'owner/repo' format",
             bufOwnerRepoInfo);
       } else {
-        bufOwner = parts[0];
-        bufRepo = parts[1];
+        return Optional.of(new BufRepoInfo(parts[0], parts[1]));
       }
     } else {
       String[] parts = fullyQualifiedTypeName.split("\\.");
@@ -286,13 +297,38 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       if (parts.length == 0) {
         log.warn("Cannot infer Buf repo name from type {}", fullyQualifiedTypeName);
       } else {
-        bufRepo = parts[0];
+        return Optional.of(new BufRepoInfo(bufDefaultOwner, parts[0]));
       }
     }
 
-    log.info("Get descriptor from Buf {}/{}@{}", bufOwner, bufRepo, fullyQualifiedTypeName);
+    return Optional.empty();
+  }
 
-    Optional<Descriptor> descriptor = bufClient.getDescriptor(bufOwner, bufRepo, fullyQualifiedTypeName);
+  private Optional<Descriptor> getDescriptor(String fullyQualifiedTypeName) {
+    if (fullyQualifiedTypeName.equals(googleProtobufAnyType)) {
+      return Optional.of(Any.getDescriptor());
+    }
+
+    Date currentDate = new Date();
+    CachedDescriptor cachedDescriptor = cachedMessageDescriptorMap.get(fullyQualifiedTypeName);
+    if (cachedDescriptor != null) {
+      if (getDateDiffMinutes(cachedDescriptor.getTimeCached(), currentDate,
+          TimeUnit.SECONDS) < cachedMessageDescriptorRetentionSeconds) {
+        return cachedDescriptor.getDescriptor();
+      }
+    }
+
+    Optional<BufRepoInfo> bufRepoInfo = getBufRepoInfo(fullyQualifiedTypeName);
+    if (bufRepoInfo.isEmpty()) {
+      log.error("could not get Buf repo info for {}", fullyQualifiedTypeName);
+      return Optional.empty();
+    }
+
+    log.info("Get descriptor from Buf {}/{}@{}", bufRepoInfo.get().getOwner(), bufRepoInfo.get().getRepo(),
+        fullyQualifiedTypeName);
+
+    Optional<Descriptor> descriptor = bufClient.getDescriptor(bufRepoInfo.get().getOwner(), bufRepoInfo.get().getRepo(),
+        fullyQualifiedTypeName);
 
     cachedDescriptor = new CachedDescriptor(currentDate, descriptor);
     cachedMessageDescriptorMap.put(fullyQualifiedTypeName, cachedDescriptor);
@@ -300,12 +336,90 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     return descriptor;
   }
 
-  private String parse(byte[] value, Descriptor descriptor) throws IOException {
-    DynamicMessage protoMsg = DynamicMessage.parseFrom(
-        descriptor,
-        new ByteArrayInputStream(value));
-    byte[] jsonFromProto = ProtobufSchemaUtils.toJson(protoMsg);
-    return new String(jsonFromProto, StandardCharsets.UTF_8);
+  private Optional<JsonFormat.TypeRegistry> getTypeRegistry(BufRepoInfo bufRepoInfo) {
+    String cacheKey = String.format("%s/%s", bufRepoInfo.getOwner(), bufRepoInfo.getRepo());
+
+    Date currentDate = new Date();
+    CachedTypeRegistry cachedTypeRegistry = cachedTypeRegistryMap.get(cacheKey);
+    if (cachedTypeRegistry != null) {
+      if (getDateDiffMinutes(cachedTypeRegistry.getTimeCached(), currentDate,
+          TimeUnit.SECONDS) < cachedMessageDescriptorRetentionSeconds) {
+        return cachedTypeRegistry.getTypeRegistry();
+      }
+    }
+
+    log.info("Get file descriptors from Buf {}/{}", bufRepoInfo.getOwner(), bufRepoInfo.getRepo());
+
+    List<FileDescriptor> fileDescriptors = bufClient.getFileDescriptors(bufRepoInfo.getOwner(),
+        bufRepoInfo.getRepo());
+
+    Optional<JsonFormat.TypeRegistry> typeRegistry = Optional.empty();
+
+    if (!fileDescriptors.isEmpty()) {
+      JsonFormat.TypeRegistry.Builder builder = JsonFormat.TypeRegistry.newBuilder();
+
+      for (FileDescriptor fileDescriptor : fileDescriptors) {
+        for (Descriptor descriptor : fileDescriptor.getMessageTypes()) {
+          builder.add(descriptor);
+        }
+      }
+
+      typeRegistry = Optional.of(builder.build());
+    }
+
+    cachedTypeRegistry = new CachedTypeRegistry(currentDate, typeRegistry);
+    cachedTypeRegistryMap.put(cacheKey, cachedTypeRegistry);
+
+    return typeRegistry;
+  }
+
+  private String parse(byte[] value, Descriptor descriptor) {
+    try {
+      DynamicMessage protoMsg = DynamicMessage.parseFrom(
+          descriptor,
+          new ByteArrayInputStream(value));
+
+      if (descriptor.getFullName().equals(googleProtobufAnyType)) {
+        Any anyMsg = Any.parseFrom(value);
+
+        // Get the fully qualified type name from a URL like
+        // type.googleapis.com/google.protobuf.Duration.
+        String type = anyMsg.getTypeUrl();
+        String[] parts = anyMsg.getTypeUrl().split("/");
+        if (parts.length == 2) {
+          type = parts[1];
+        }
+        Optional<Descriptor> valueDescriptor = getDescriptor(type);
+
+        if (valueDescriptor.isPresent()) {
+          JsonFormat.TypeRegistry typeRegistry = JsonFormat.TypeRegistry.newBuilder()
+              .add(valueDescriptor.get())
+              .build();
+
+          JsonFormat.Printer printer = JsonFormat.printer().usingTypeRegistry(typeRegistry);
+
+          return printer.print(protoMsg);
+        }
+      } else {
+        Optional<BufRepoInfo> bufRepoInfo = getBufRepoInfo(descriptor.getFullName());
+        if (bufRepoInfo.isPresent()) {
+          Optional<JsonFormat.TypeRegistry> typeRegistry = getTypeRegistry(bufRepoInfo.get());
+          if (typeRegistry.isPresent()) {
+            JsonFormat.Printer printer = JsonFormat.printer().usingTypeRegistry(typeRegistry.get());
+
+            return printer.print(protoMsg);
+          }
+        }
+      }
+
+      return JsonFormat.printer().print(protoMsg);
+    } catch (
+
+    IOException e) {
+      log.error("failed protobuf derserialization: {}", e);
+    }
+
+    return new String(value, StandardCharsets.UTF_8);
   }
 
   @Override
