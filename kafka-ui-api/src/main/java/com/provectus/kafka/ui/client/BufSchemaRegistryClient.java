@@ -43,6 +43,46 @@ public class BufSchemaRegistryClient {
     bufClient = bufClient.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(headers));
   }
 
+  public List<FileDescriptor> getFileDescriptors(String owner, String repo) {
+    Image image;
+
+    try {
+      image = getImage(owner, repo);
+    } catch (StatusRuntimeException e) {
+      log.error("Failed to get image {}", e);
+      return new ArrayList<>();
+    }
+
+    FileDescriptorSet fileDescriptorSet;
+    try {
+      fileDescriptorSet = FileDescriptorSet.parseFrom(image.toByteArray());
+    } catch (InvalidProtocolBufferException e) {
+      log.error("Failed to parse Image into FileDescriptorSet {}", e);
+      return new ArrayList<>();
+    }
+
+    Map<String, FileDescriptorProto> descriptorProtoIndex = new HashMap<>();
+
+    for (int i = 0; i < fileDescriptorSet.getFileCount(); i++) {
+      FileDescriptorProto p = fileDescriptorSet.getFile(i);
+      descriptorProtoIndex.put(p.getName(), p);
+    }
+
+    final Map<String, FileDescriptor> descriptorCache = new HashMap<>();
+
+    final List<FileDescriptor> allFileDescriptors = new ArrayList<>();
+    try {
+      for (int i = 0; i < fileDescriptorSet.getFileCount(); i++) {
+        FileDescriptor desc = descriptorFromProto(fileDescriptorSet.getFile(i), descriptorProtoIndex, descriptorCache);
+        allFileDescriptors.add(desc);
+      }
+    } catch (DescriptorValidationException e) {
+      log.error("Failed to create dependencies map {}", e);
+    }
+
+    return allFileDescriptors;
+  }
+
   public Optional<Descriptor> getDescriptor(String owner, String repo, String fullyQualifiedTypeName) {
     List<String> parts = Arrays.asList(fullyQualifiedTypeName.split("\\."));
 
@@ -56,43 +96,9 @@ public class BufSchemaRegistryClient {
 
     log.info("Looking for type {} in package {}", typeName, packageName);
 
-    Image image;
+    List<FileDescriptor> fileDescriptors = getFileDescriptors(owner, repo);
 
-    try {
-      image = getImage(owner, repo);
-    } catch (StatusRuntimeException e) {
-      log.error("Failed to get image {}", e);
-      return Optional.empty();
-    }
-
-    FileDescriptorSet fileDescriptorSet;
-    try {
-      fileDescriptorSet = FileDescriptorSet.parseFrom(image.toByteArray());
-    } catch (InvalidProtocolBufferException e) {
-      log.error("Failed to parse Image into FileDescriptorSet {}", e);
-      return Optional.empty();
-    }
-
-    Map<String, FileDescriptorProto> descriptorProtoIndex = new HashMap<>();
-
-    for (int i = 0; i < fileDescriptorSet.getFileCount(); i++) {
-      FileDescriptorProto p = fileDescriptorSet.getFile(i);
-      descriptorProtoIndex.put(p.getName(), p);
-    }
-
-    final Map<String, FileDescriptor> descriptorCache = new HashMap<>();
-
-    final Map<String, FileDescriptor> allFileDescriptors = new HashMap<>();
-    try {
-      for (int i = 0; i < fileDescriptorSet.getFileCount(); i++) {
-        FileDescriptor desc = descriptorFromProto(fileDescriptorSet.getFile(i), descriptorProtoIndex, descriptorCache);
-        allFileDescriptors.put(desc.getName(), desc);
-      }
-    } catch (DescriptorValidationException e) {
-      log.error("Failed to create dependencies map {}", e);
-    }
-
-    return Optional.ofNullable(allFileDescriptors.values()
+    return Optional.ofNullable(fileDescriptors
         .stream()
         .filter(f -> f.getPackage().equals(packageName))
         .map(f -> f.findMessageTypeByName(typeName))
