@@ -347,15 +347,15 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
     log.info("Get file descriptors from Buf {}/{}", bufRepoInfo.getOwner(), bufRepoInfo.getRepo());
 
-    Optional<List<FileDescriptor>> fileDescriptors = bufClient.getFileDescriptors(bufRepoInfo.getOwner(),
+    List<FileDescriptor> fileDescriptors = bufClient.getFileDescriptors(bufRepoInfo.getOwner(),
         bufRepoInfo.getRepo());
 
     Optional<JsonFormat.TypeRegistry> typeRegistry = Optional.empty();
 
-    if (fileDescriptors.isPresent()) {
+    if (!fileDescriptors.isEmpty()) {
       JsonFormat.TypeRegistry.Builder builder = JsonFormat.TypeRegistry.newBuilder();
 
-      for (FileDescriptor fileDescriptor : fileDescriptors.get()) {
+      for (FileDescriptor fileDescriptor : fileDescriptors) {
         for (Descriptor descriptor : fileDescriptor.getMessageTypes()) {
           builder.add(descriptor);
         }

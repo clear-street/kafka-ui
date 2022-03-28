@@ -43,14 +43,14 @@ public class BufSchemaRegistryClient {
     bufClient = bufClient.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(headers));
   }
 
-  public Optional<List<FileDescriptor>> getFileDescriptors(String owner, String repo) {
+  public List<FileDescriptor> getFileDescriptors(String owner, String repo) {
     Image image;
 
     try {
       image = getImage(owner, repo);
     } catch (StatusRuntimeException e) {
       log.error("Failed to get image {}", e);
-      return Optional.empty();
+      return new ArrayList<>();
     }
 
     FileDescriptorSet fileDescriptorSet;
@@ -58,7 +58,7 @@ public class BufSchemaRegistryClient {
       fileDescriptorSet = FileDescriptorSet.parseFrom(image.toByteArray());
     } catch (InvalidProtocolBufferException e) {
       log.error("Failed to parse Image into FileDescriptorSet {}", e);
-      return Optional.empty();
+      return new ArrayList<>();
     }
 
     Map<String, FileDescriptorProto> descriptorProtoIndex = new HashMap<>();
@@ -80,7 +80,7 @@ public class BufSchemaRegistryClient {
       log.error("Failed to create dependencies map {}", e);
     }
 
-    return Optional.of(allFileDescriptors);
+    return allFileDescriptors;
   }
 
   public Optional<Descriptor> getDescriptor(String owner, String repo, String fullyQualifiedTypeName) {
@@ -96,12 +96,9 @@ public class BufSchemaRegistryClient {
 
     log.info("Looking for type {} in package {}", typeName, packageName);
 
-    Optional<List<FileDescriptor>> fileDescriptors = getFileDescriptors(owner, repo);
-    if (fileDescriptors.isEmpty()) {
-      return Optional.empty();
-    }
+    List<FileDescriptor> fileDescriptors = getFileDescriptors(owner, repo);
 
-    return Optional.ofNullable(fileDescriptors.get()
+    return Optional.ofNullable(fileDescriptors
         .stream()
         .filter(f -> f.getPackage().equals(packageName))
         .map(f -> f.findMessageTypeByName(typeName))
