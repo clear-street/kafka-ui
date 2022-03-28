@@ -66,7 +66,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   private final Map<String, String> protobufKeyMessageNameByTopic;
 
   private final Map<String, CachedDescriptor> cachedMessageDescriptorMap;
-  private final Map<String, CachedDescriptor> cachedFileDescriptorsMap;
+  private final Map<String, CachedFileDescriptors> cachedFileDescriptorsMap;
   private final int cachedMessageDescriptorRetentionSeconds;
 
   private final String googleProtobufAnyType = "google.protobuf.Any";
@@ -327,30 +327,35 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     return descriptor;
   }
 
-  private String parse(byte[] value, Descriptor descriptor) {
-    /*
-     * DynamicMessage protoMsg = DynamicMessage.parseFrom(
-     * Any.getDescriptor(), // descriptor
-     * new ByteArrayInputStream(value));
-     * 
-     * JsonFormat.TypeRegistry typeRegistry = JsonFormat.TypeRegistry.newBuilder()
-     * .add(descriptor)
-     * .build();
-     * 
-     * JsonFormat.Printer printer =
-     * JsonFormat.printer().usingTypeRegistry(typeRegistry);
-     * 
-     * // JsonFormat formatter = new JsonFormat();
-     * 
-     * String jsonString = printer.print(protoMsg);
-     * // JsonFormat.printer().print(protoMsg);
-     * 
-     * log.info("parsed: {}", jsonString);
-     * 
-     * return jsonString;
-     */
+  private Optional<List<FileDescriptor>> getFileDescriptors(BufRepoInfo bufRepoInfo) {
+    String cacheKey = String.format("%s/%s", bufRepoInfo.getOwner(), bufRepoInfo.getRepo());
 
+    Date currentDate = new Date();
+    CachedFileDescriptors cachedFileDescriptors = cachedFileDescriptorsMap.get(cacheKey);
+    if (cachedFileDescriptors != null) {
+      if (getDateDiffMinutes(cachedFileDescriptors.getTimeCached(), currentDate,
+          TimeUnit.SECONDS) < cachedMessageDescriptorRetentionSeconds) {
+        return cachedFileDescriptors.getFileDescriptors();
+      }
+    }
+
+    log.info("Get file descriptors from Buf {}/{}", bufRepoInfo.getOwner(), bufRepoInfo.getRepo());
+
+    Optional<List<FileDescriptor>> fileDescriptors = bufClient.getFileDescriptors(bufRepoInfo.getOwner(),
+        bufRepoInfo.getRepo());
+
+    cachedFileDescriptors = new CachedFileDescriptors(currentDate, fileDescriptors);
+    cachedFileDescriptorsMap.put(cacheKey, cachedFileDescriptors);
+
+    return fileDescriptors;
+  }
+
+  private String parse(byte[] value, Descriptor descriptor) {
     try {
+      DynamicMessage protoMsg = DynamicMessage.parseFrom(
+          descriptor,
+          new ByteArrayInputStream(value));
+
       if (descriptor.getFullName().equals(googleProtobufAnyType)) {
         Any anyMsg = Any.parseFrom(value);
 
@@ -364,10 +369,6 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
         Optional<Descriptor> valueDescriptor = getDescriptor(type);
 
         if (valueDescriptor.isPresent()) {
-          DynamicMessage protoMsg = DynamicMessage.parseFrom(
-              descriptor,
-              new ByteArrayInputStream(value));
-
           JsonFormat.TypeRegistry typeRegistry = JsonFormat.TypeRegistry.newBuilder()
               .add(valueDescriptor.get())
               .build();
@@ -378,15 +379,32 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
         }
       } else {
         // TODO: Get file descriptors
-      }
+        Optional<BufRepoInfo> bufRepoInfo = getBufRepoInfo(descriptor.getFullName());
+        if (bufRepoInfo.isPresent()) {
+          Optional<List<FileDescriptor>> fileDescriptors = getFileDescriptors(bufRepoInfo.get());
+          if (fileDescriptors.isPresent()) {
+            JsonFormat.TypeRegistry.Builder builder = JsonFormat.TypeRegistry.newBuilder();
 
-      DynamicMessage protoMsg = DynamicMessage.parseFrom(
-          descriptor,
-          new ByteArrayInputStream(value));
+            for (FileDescriptor fileDescriptor : fileDescriptors.get()) {
+              for (Descriptor d : fileDescriptor.getMessageTypes()) {
+                builder.add(d);
+              }
+            }
+
+            JsonFormat.TypeRegistry typeRegistry = builder.build();
+
+            JsonFormat.Printer printer = JsonFormat.printer().usingTypeRegistry(typeRegistry);
+
+            return printer.print(protoMsg);
+          }
+        }
+      }
 
       byte[] jsonFromProto = ProtobufSchemaUtils.toJson(protoMsg);
       return new String(jsonFromProto, StandardCharsets.UTF_8);
-    } catch (IOException e) {
+    } catch (
+
+    IOException e) {
       log.error("failed protobuf derserialization: {}", e);
     }
 
