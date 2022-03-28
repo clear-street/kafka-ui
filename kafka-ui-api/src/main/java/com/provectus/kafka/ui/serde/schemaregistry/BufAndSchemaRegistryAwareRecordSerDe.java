@@ -404,7 +404,6 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       }
 
       return JsonFormat.printer().print(protoMsg);
-      //return new String(jsonFromProto, StandardCharsets.UTF_8);
     } catch (
 
     IOException e) {
