@@ -61,6 +61,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   private final BufSchemaRegistryClient bufClient;
 
   private final String bufDefaultOwner;
+  private final String bufDefaultRepo;
   private final Map<String, String> bufOwnerRepoByProtobufMessageName;
   private final Map<String, String> protobufMessageNameByTopic;
   private final Map<String, String> protobufKeyMessageNameByTopic;
@@ -103,6 +104,11 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       this.bufDefaultOwner = cluster.getBufDefaultOwner();
     } else {
       this.bufDefaultOwner = "";
+    }
+    if (cluster.getBufDefaultRepo() != null) {
+      this.bufDefaultRepo = cluster.getBufDefaultRepo();
+    } else {
+      this.bufDefaultRepo = "";
     }
     if (cluster.getBufOwnerRepoByProtobufMessageName() != null) {
       this.bufOwnerRepoByProtobufMessageName = cluster.getBufOwnerRepoByProtobufMessageName();
@@ -274,6 +280,10 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     return timeUnit.convert(diffInMillis, TimeUnit.MILLISECONDS);
   }
 
+  private BufRepoInfo getDefaultBufRepoInfo() {
+    return new BufRepoInfo(bufDefaultOwner, bufDefaultRepo);
+  }
+
   private Optional<BufRepoInfo> getBufRepoInfo(String fullyQualifiedTypeName) {
     String bufOwner = bufDefaultOwner;
     String bufRepo = "";
@@ -326,6 +336,16 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
     Optional<Descriptor> descriptor = bufClient.getDescriptor(bufRepoInfo.get().getOwner(), bufRepoInfo.get().getRepo(),
         fullyQualifiedTypeName);
+
+    if (descriptor.isEmpty()) {
+      BufRepoInfo defaultRepoInfo = getDefaultBufRepoInfo();
+
+      log.info("Not found, falling back to Buf repo {}/{}@{}", defaultRepoInfo.getOwner(), defaultRepoInfo.getRepo(),
+          fullyQualifiedTypeName);
+
+      descriptor = bufClient.getDescriptor(defaultRepoInfo.getOwner(), defaultRepoInfo.getRepo(),
+          fullyQualifiedTypeName);
+    }
 
     cachedDescriptor = new CachedDescriptor(currentDate, descriptor);
     cachedMessageDescriptorMap.put(fullyQualifiedTypeName, cachedDescriptor);
@@ -410,10 +430,25 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       }
 
       return JsonFormat.printer().print(protoMsg);
-    } catch (
-
-    IOException e) {
+    } catch (IOException e) {
       log.error("failed protobuf derserialization: {}", e);
+    }
+
+    // Trry using the default repo info.
+    try {
+      DynamicMessage protoMsg = DynamicMessage.parseFrom(
+          descriptor,
+          new ByteArrayInputStream(value));
+
+      BufRepoInfo defaultBufRepoInfo = getDefaultBufRepoInfo();
+      Optional<JsonFormat.TypeRegistry> typeRegistry = getTypeRegistry(defaultBufRepoInfo);
+      if (typeRegistry.isPresent()) {
+        JsonFormat.Printer printer = JsonFormat.printer().usingTypeRegistry(typeRegistry.get());
+
+        return printer.print(protoMsg);
+      }
+    } catch (IOException e) {
+      log.error("failed protobuf derserialization with default repo info: {}", e);
     }
 
     return new String(value, StandardCharsets.UTF_8);
