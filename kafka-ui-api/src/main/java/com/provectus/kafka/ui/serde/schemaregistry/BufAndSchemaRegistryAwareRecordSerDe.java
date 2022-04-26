@@ -55,11 +55,13 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   private class BufRepoInfo {
     final String owner;
     final String repo;
+    final String reference;
   }
 
   private final SchemaRegistryAwareRecordSerDe schemaRegistryAwareRecordSerDe;
   private final BufSchemaRegistryClient bufClient;
 
+  private final String bufRegistryUrl;
   private final String bufDefaultOwner;
   private final String bufDefaultRepo;
   private final Map<String, String> bufOwnerRepoByProtobufMessageName;
@@ -126,6 +128,8 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       this.protobufKeyMessageNameByTopic = new HashMap<>();
     }
 
+    this.bufRegistryUrl = cluster.getBufRegistry();
+
     this.cachedMessageDescriptorMap = new HashMap<>();
     this.cachedTypeRegistryMap = new HashMap<>();
 
@@ -141,7 +145,9 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   @Override
   public DeserializedKeyValue deserialize(ConsumerRecord<Bytes, Bytes> msg) {
     String keyType = null;
+    String keySchemaInfo = null;
     String valueType = null;
+    String valueSchemaInfo = null;
 
     Optional<ProtoSchema> protoSchemaFromTopic = protoSchemaFromTopic(msg.topic());
 
@@ -153,11 +159,13 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     Optional<ProtoSchema> protoSchemaForKeyFromHeader = protoKeySchemaFromHeaders(msg.headers());
     if (protoSchemaForKeyFromHeader.isPresent()) {
       keyType = protoSchemaForKeyFromHeader.get().getFullyQualifiedTypeName();
+      keySchemaInfo = protoSchemaForKeyFromHeader.get().getSchemaID();
     }
 
     Optional<ProtoSchema> protoSchemaForValueFromHeader = protoValueSchemaFromHeaders(msg.headers());
     if (protoSchemaForValueFromHeader.isPresent()) {
       valueType = protoSchemaForValueFromHeader.get().getFullyQualifiedTypeName();
+      valueSchemaInfo = protoSchemaForValueFromHeader.get().getSchemaID();
     }
 
     String keyTypeFromConfig = protobufKeyMessageNameByTopic.get(msg.topic());
@@ -171,7 +179,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     }
 
     if (keyType != null || valueType != null) {
-      return deserializeProto(msg, keyType, valueType);
+      return deserializeProto(msg, keyType, keySchemaInfo, valueType, valueSchemaInfo);
     }
 
     log.debug("No proto schema found, skipping buf for topic {}", msg.topic());
@@ -181,10 +189,12 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
   private DeserializedKeyValue deserializeProto(ConsumerRecord<Bytes, Bytes> msg,
       String keyFullyQualifiedType,
-      String valueFullyQualifiedType) {
+      String keySchemaInfo,
+      String valueFullyQualifiedType,
+      String valueSchemaInfo) {
     Optional<Descriptor> keyDescriptor = Optional.empty();
     if (keyFullyQualifiedType != null) {
-      keyDescriptor = getDescriptor(keyFullyQualifiedType);
+      keyDescriptor = getDescriptor(keyFullyQualifiedType, keySchemaInfo);
       if (!keyDescriptor.isPresent()) {
         log.warn("No key descriptor found for topic {} with schema {}", msg.topic(), keyFullyQualifiedType);
       }
@@ -192,7 +202,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
     Optional<Descriptor> valueDescriptor = Optional.empty();
     if (valueFullyQualifiedType != null) {
-      valueDescriptor = getDescriptor(valueFullyQualifiedType);
+      valueDescriptor = getDescriptor(valueFullyQualifiedType, valueSchemaInfo);
       if (!valueDescriptor.isPresent()) {
         log.warn("No value descriptor found for topic {} with schema {}", msg.topic(), valueFullyQualifiedType);
       }
@@ -203,38 +213,61 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
   Optional<ProtoSchema> protoKeySchemaFromHeaders(Headers headers) {
     // Get protobuf.type.key header.
-    String fullyQualifiedTypeName = null;
+    String typeUrl = null;
     for (Header header : headers) {
       if (header.key().toLowerCase().equals("protobuf.type.key")) {
-        fullyQualifiedTypeName = new String(header.value(), StandardCharsets.UTF_8);
+        typeUrl = new String(header.value(), StandardCharsets.UTF_8);
       }
     }
 
-    if (fullyQualifiedTypeName == null) {
+    if (typeUrl == null) {
       return Optional.empty();
     }
 
-    ProtoSchema ret = new ProtoSchema();
-    ret.setFullyQualifiedTypeName(fullyQualifiedTypeName);
-    return Optional.of(ret);
+    return Optional.of(parseTypeHeader(typeUrl));
   }
 
   Optional<ProtoSchema> protoValueSchemaFromHeaders(Headers headers) {
     // Get protobuf.type.value header.
-    String fullyQualifiedTypeName = null;
+    String typeUrl = null;
     for (Header header : headers) {
       if (header.key().toLowerCase().equals("protobuf.type.value")) {
-        fullyQualifiedTypeName = new String(header.value(), StandardCharsets.UTF_8);
+        typeUrl = new String(header.value(), StandardCharsets.UTF_8);
       }
     }
 
-    if (fullyQualifiedTypeName == null) {
+    if (typeUrl == null) {
       return Optional.empty();
     }
 
+    return Optional.of(parseTypeHeader(typeUrl));
+  }
+
+  ProtoSchema parseTypeHeader(String typeUrl) {
+    /*
+     * Parse a type URL like buf.build/owner/repo:commit/type into the buf owner,
+     * repo, and commit info and the protobuf type.
+     */
+
+    String[] parts = typeUrl.split("/");
+    if (parts.length != 4) {
+      ProtoSchema ret = new ProtoSchema();
+      ret.setFullyQualifiedTypeName(typeUrl);
+      return ret;
+    }
+
+    if (!parts[0].equals(bufRegistryUrl)) {
+      log.error("{} is not a supported Buf registry", parts[0]);
+
+      ProtoSchema ret = new ProtoSchema();
+      ret.setFullyQualifiedTypeName(parts[3]);
+      return ret;
+    }
+
     ProtoSchema ret = new ProtoSchema();
-    ret.setFullyQualifiedTypeName(fullyQualifiedTypeName);
-    return Optional.of(ret);
+    ret.setFullyQualifiedTypeName(parts[3]);
+    ret.setSchemaID(parts[1] + "/" + parts[2]);
+    return ret;
   }
 
   Optional<ProtoSchema> protoSchemaFromTopic(String topic) {
@@ -281,10 +314,26 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   }
 
   private BufRepoInfo getDefaultBufRepoInfo() {
-    return new BufRepoInfo(bufDefaultOwner, bufDefaultRepo);
+    return new BufRepoInfo(bufDefaultOwner, bufDefaultRepo, "main");
   }
 
-  private Optional<BufRepoInfo> getBufRepoInfo(String fullyQualifiedTypeName) {
+  // Parse buf info from the type name and Buf schmea info. Schema info should be
+  // of form "owner/repo:reference".
+  private Optional<BufRepoInfo> getBufRepoInfo(String fullyQualifiedTypeName, String schemaInfo) {
+    if (schemaInfo != null) {
+      if (schemaInfo.length() > 0) {
+        String[] repoParts = schemaInfo.split("/");
+        if (repoParts.length == 2) {
+          String[] referenceParts = repoParts[1].split(":");
+          if (referenceParts.length == 2) {
+            return Optional.of(new BufRepoInfo(repoParts[0], referenceParts[0], referenceParts[1]));
+          } else {
+            return Optional.of(new BufRepoInfo(repoParts[0], repoParts[1], "main"));
+          }
+        }
+      }
+    }
+
     String bufOwner = bufDefaultOwner;
     String bufRepo = "";
 
@@ -296,7 +345,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
         log.error("Cannot parse Buf owner and repo info from {}, make sure it is in the 'owner/repo' format",
             bufOwnerRepoInfo);
       } else {
-        return Optional.of(new BufRepoInfo(parts[0], parts[1]));
+        return Optional.of(new BufRepoInfo(parts[0], parts[1], "main"));
       }
     } else {
       String[] parts = fullyQualifiedTypeName.split("\\.");
@@ -304,14 +353,14 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       if (parts.length == 0) {
         log.warn("Cannot infer Buf repo name from type {}", fullyQualifiedTypeName);
       } else {
-        return Optional.of(new BufRepoInfo(bufDefaultOwner, parts[0]));
+        return Optional.of(new BufRepoInfo(bufDefaultOwner, parts[0], "main"));
       }
     }
 
     return Optional.empty();
   }
 
-  private Optional<Descriptor> getDescriptor(String fullyQualifiedTypeName) {
+  private Optional<Descriptor> getDescriptor(String fullyQualifiedTypeName, String schemaInfo) {
     if (fullyQualifiedTypeName.equals(googleProtobufAnyType)) {
       return Optional.of(Any.getDescriptor());
     }
@@ -325,7 +374,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       }
     }
 
-    Optional<BufRepoInfo> bufRepoInfo = getBufRepoInfo(fullyQualifiedTypeName);
+    Optional<BufRepoInfo> bufRepoInfo = getBufRepoInfo(fullyQualifiedTypeName, schemaInfo);
     if (bufRepoInfo.isEmpty()) {
       log.error("could not get Buf repo info for {}", fullyQualifiedTypeName);
       return Optional.empty();
@@ -335,7 +384,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
         fullyQualifiedTypeName);
 
     Optional<Descriptor> descriptor = bufClient.getDescriptor(bufRepoInfo.get().getOwner(), bufRepoInfo.get().getRepo(),
-        fullyQualifiedTypeName);
+        bufRepoInfo.get().getReference(), fullyQualifiedTypeName);
 
     if (descriptor.isEmpty()) {
       BufRepoInfo defaultRepoInfo = getDefaultBufRepoInfo();
@@ -344,7 +393,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
           fullyQualifiedTypeName);
 
       descriptor = bufClient.getDescriptor(defaultRepoInfo.getOwner(), defaultRepoInfo.getRepo(),
-          fullyQualifiedTypeName);
+          defaultRepoInfo.getReference(), fullyQualifiedTypeName);
     }
 
     cachedDescriptor = new CachedDescriptor(currentDate, descriptor);
@@ -368,7 +417,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     log.info("Get file descriptors from Buf {}/{}", bufRepoInfo.getOwner(), bufRepoInfo.getRepo());
 
     List<FileDescriptor> fileDescriptors = bufClient.getFileDescriptors(bufRepoInfo.getOwner(),
-        bufRepoInfo.getRepo());
+        bufRepoInfo.getRepo(), bufRepoInfo.getReference());
 
     Optional<JsonFormat.TypeRegistry> typeRegistry = Optional.empty();
 
@@ -406,7 +455,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
         if (parts.length == 2) {
           type = parts[1];
         }
-        Optional<Descriptor> valueDescriptor = getDescriptor(type);
+        Optional<Descriptor> valueDescriptor = getDescriptor(type, null);
 
         if (valueDescriptor.isPresent()) {
           JsonFormat.TypeRegistry typeRegistry = JsonFormat.TypeRegistry.newBuilder()
@@ -418,7 +467,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
           return printer.print(protoMsg);
         }
       } else {
-        Optional<BufRepoInfo> bufRepoInfo = getBufRepoInfo(descriptor.getFullName());
+        Optional<BufRepoInfo> bufRepoInfo = getBufRepoInfo(descriptor.getFullName(), null);
         if (bufRepoInfo.isPresent()) {
           Optional<JsonFormat.TypeRegistry> typeRegistry = getTypeRegistry(bufRepoInfo.get());
           if (typeRegistry.isPresent()) {
@@ -468,7 +517,8 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       throw new IllegalStateException("Could not infer proto schema from topic " + topic);
     }
 
-    Optional<Descriptor> descriptor = getDescriptor(protoSchema.get().getFullyQualifiedTypeName());
+    Optional<Descriptor> descriptor = getDescriptor(protoSchema.get().getFullyQualifiedTypeName(),
+        protoSchema.get().getSchemaID());
     if (!descriptor.isPresent()) {
       throw new IllegalArgumentException("Could not get descriptor for "
           + protoSchema.get().getFullyQualifiedTypeName());
