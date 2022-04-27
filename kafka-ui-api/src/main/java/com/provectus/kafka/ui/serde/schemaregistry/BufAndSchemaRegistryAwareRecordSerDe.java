@@ -196,7 +196,8 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     if (keyFullyQualifiedType != null) {
       keyDescriptor = getDescriptor(keyFullyQualifiedType, keySchemaInfo);
       if (!keyDescriptor.isPresent()) {
-        log.warn("No key descriptor found for topic {} with schema {}", msg.topic(), keyFullyQualifiedType);
+        log.warn("No key descriptor found for topic {} with schema {}, {}", msg.topic(), keyFullyQualifiedType,
+            keySchemaInfo);
       }
     }
 
@@ -204,11 +205,12 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     if (valueFullyQualifiedType != null) {
       valueDescriptor = getDescriptor(valueFullyQualifiedType, valueSchemaInfo);
       if (!valueDescriptor.isPresent()) {
-        log.warn("No value descriptor found for topic {} with schema {}", msg.topic(), valueFullyQualifiedType);
+        log.warn("No value descriptor found for topic {} with schema {}, {}", msg.topic(), valueFullyQualifiedType,
+            valueSchemaInfo);
       }
     }
 
-    return this.deserializeProtobuf(msg, keyDescriptor, valueDescriptor);
+    return this.deserializeProtobuf(msg, keyDescriptor, keySchemaInfo, valueDescriptor, valueSchemaInfo);
   }
 
   Optional<ProtoSchema> protoKeySchemaFromHeaders(Headers headers) {
@@ -266,7 +268,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
     ProtoSchema ret = new ProtoSchema();
     ret.setFullyQualifiedTypeName(parts[3]);
-    ret.setSchemaID(parts[1] + "/" + parts[2]);
+    ret.setSchemaID(String.format("%s/%s", parts[1], parts[2]));
     return ret;
   }
 
@@ -285,11 +287,13 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
   private DeserializedKeyValue deserializeProtobuf(ConsumerRecord<Bytes, Bytes> msg,
       Optional<Descriptor> keyDescriptor,
-      Optional<Descriptor> valueDescriptor) {
+      String keySchemaInfo,
+      Optional<Descriptor> valueDescriptor,
+      String valueSchemaInfo) {
     var builder = DeserializedKeyValue.builder();
     if (msg.key() != null) {
       if (keyDescriptor.isPresent()) {
-        builder.key(parse(msg.key().get(), keyDescriptor.get()));
+        builder.key(parse(msg.key().get(), keyDescriptor.get(), keySchemaInfo));
         builder.keyFormat(MessageFormat.PROTOBUF);
       } else {
         builder.key(new String(msg.key().get(), StandardCharsets.UTF_8));
@@ -298,7 +302,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     }
     if (msg.value() != null) {
       if (valueDescriptor.isPresent()) {
-        builder.value(parse(msg.value().get(), valueDescriptor.get()));
+        builder.value(parse(msg.value().get(), valueDescriptor.get(), valueSchemaInfo));
         builder.valueFormat(MessageFormat.PROTOBUF);
       } else {
         builder.value(new String(msg.value().get(), StandardCharsets.UTF_8));
@@ -365,8 +369,18 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       return Optional.of(Any.getDescriptor());
     }
 
+    Optional<BufRepoInfo> bufRepoInfo = getBufRepoInfo(fullyQualifiedTypeName, schemaInfo);
+    if (bufRepoInfo.isEmpty()) {
+      log.error("could not get Buf repo info for {}", fullyQualifiedTypeName);
+      return Optional.empty();
+    }
+
+    String cacheKey = String.format("%s/%s/%s:%s", bufRepoInfo.get().getOwner(), bufRepoInfo.get().getRepo(),
+        fullyQualifiedTypeName,
+        bufRepoInfo.get().getReference());
+
     Date currentDate = new Date();
-    CachedDescriptor cachedDescriptor = cachedMessageDescriptorMap.get(fullyQualifiedTypeName);
+    CachedDescriptor cachedDescriptor = cachedMessageDescriptorMap.get(cacheKey);
     if (cachedDescriptor != null) {
       if (getDateDiffMinutes(cachedDescriptor.getTimeCached(), currentDate,
           TimeUnit.SECONDS) < cachedMessageDescriptorRetentionSeconds) {
@@ -374,14 +388,8 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       }
     }
 
-    Optional<BufRepoInfo> bufRepoInfo = getBufRepoInfo(fullyQualifiedTypeName, schemaInfo);
-    if (bufRepoInfo.isEmpty()) {
-      log.error("could not get Buf repo info for {}", fullyQualifiedTypeName);
-      return Optional.empty();
-    }
-
-    log.info("Get descriptor from Buf {}/{}@{}", bufRepoInfo.get().getOwner(), bufRepoInfo.get().getRepo(),
-        fullyQualifiedTypeName);
+    log.info("Get descriptor from Buf {}/{}:{}/{}", bufRepoInfo.get().getOwner(), bufRepoInfo.get().getRepo(),
+        bufRepoInfo.get().getReference(), fullyQualifiedTypeName);
 
     Optional<Descriptor> descriptor = bufClient.getDescriptor(bufRepoInfo.get().getOwner(), bufRepoInfo.get().getRepo(),
         bufRepoInfo.get().getReference(), fullyQualifiedTypeName);
@@ -389,21 +397,22 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     if (descriptor.isEmpty()) {
       BufRepoInfo defaultRepoInfo = getDefaultBufRepoInfo();
 
-      log.info("Not found, falling back to Buf repo {}/{}@{}", defaultRepoInfo.getOwner(), defaultRepoInfo.getRepo(),
-          fullyQualifiedTypeName);
+      log.info("Not found, falling back to Buf repo {}/{}:{}/{}", defaultRepoInfo.getOwner(), defaultRepoInfo.getRepo(),
+          defaultRepoInfo.getReference(), fullyQualifiedTypeName);
 
       descriptor = bufClient.getDescriptor(defaultRepoInfo.getOwner(), defaultRepoInfo.getRepo(),
           defaultRepoInfo.getReference(), fullyQualifiedTypeName);
     }
 
     cachedDescriptor = new CachedDescriptor(currentDate, descriptor);
-    cachedMessageDescriptorMap.put(fullyQualifiedTypeName, cachedDescriptor);
+    cachedMessageDescriptorMap.put(cacheKey, cachedDescriptor);
 
     return descriptor;
   }
 
   private Optional<JsonFormat.TypeRegistry> getTypeRegistry(BufRepoInfo bufRepoInfo) {
-    String cacheKey = String.format("%s/%s", bufRepoInfo.getOwner(), bufRepoInfo.getRepo());
+    String cacheKey = String.format("%s/%s:%s", bufRepoInfo.getOwner(), bufRepoInfo.getRepo(),
+        bufRepoInfo.getReference());
 
     Date currentDate = new Date();
     CachedTypeRegistry cachedTypeRegistry = cachedTypeRegistryMap.get(cacheKey);
@@ -439,7 +448,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     return typeRegistry;
   }
 
-  private String parse(byte[] value, Descriptor descriptor) {
+  private String parse(byte[] value, Descriptor descriptor, String schemaInfo) {
     try {
       DynamicMessage protoMsg = DynamicMessage.parseFrom(
           descriptor,
@@ -467,7 +476,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
           return printer.print(protoMsg);
         }
       } else {
-        Optional<BufRepoInfo> bufRepoInfo = getBufRepoInfo(descriptor.getFullName(), null);
+        Optional<BufRepoInfo> bufRepoInfo = getBufRepoInfo(descriptor.getFullName(), schemaInfo);
         if (bufRepoInfo.isPresent()) {
           Optional<JsonFormat.TypeRegistry> typeRegistry = getTypeRegistry(bufRepoInfo.get());
           if (typeRegistry.isPresent()) {
@@ -483,7 +492,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
       log.error("failed protobuf derserialization: {}", e);
     }
 
-    // Trry using the default repo info.
+    // Try using the default repo info.
     try {
       DynamicMessage protoMsg = DynamicMessage.parseFrom(
           descriptor,
