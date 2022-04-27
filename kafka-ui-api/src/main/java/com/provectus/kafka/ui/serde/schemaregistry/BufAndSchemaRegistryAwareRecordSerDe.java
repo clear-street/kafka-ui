@@ -248,7 +248,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
   ProtoSchema parseTypeHeader(String typeUrl) {
     /*
      * Parse a type URL like buf.build/owner/repo:commit/type into the buf owner,
-     * repo, and commit info and the protobuf type.
+     * repo, and reference info and the fully qualified protobuf type.
      */
 
     String[] parts = typeUrl.split("/");
