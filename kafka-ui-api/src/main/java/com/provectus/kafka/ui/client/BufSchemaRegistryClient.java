@@ -43,11 +43,11 @@ public class BufSchemaRegistryClient {
     bufClient = bufClient.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(headers));
   }
 
-  public List<FileDescriptor> getFileDescriptors(String owner, String repo) {
+  public List<FileDescriptor> getFileDescriptors(String owner, String repo, String reference) {
     Image image;
 
     try {
-      image = getImage(owner, repo);
+      image = getImage(owner, repo, reference);
     } catch (StatusRuntimeException e) {
       log.error("Failed to get image {}", e);
       return new ArrayList<>();
@@ -83,7 +83,8 @@ public class BufSchemaRegistryClient {
     return allFileDescriptors;
   }
 
-  public Optional<Descriptor> getDescriptor(String owner, String repo, String fullyQualifiedTypeName) {
+  public Optional<Descriptor> getDescriptor(String owner, String repo, String reference,
+      String fullyQualifiedTypeName) {
     List<String> parts = Arrays.asList(fullyQualifiedTypeName.split("\\."));
 
     if (parts.isEmpty()) {
@@ -96,7 +97,7 @@ public class BufSchemaRegistryClient {
 
     log.info("Looking for type {} in package {}", typeName, packageName);
 
-    List<FileDescriptor> fileDescriptors = getFileDescriptors(owner, repo);
+    List<FileDescriptor> fileDescriptors = getFileDescriptors(owner, repo, reference);
 
     return Optional.ofNullable(fileDescriptors
         .stream()
@@ -107,11 +108,11 @@ public class BufSchemaRegistryClient {
         .orElse(null));
   }
 
-  private Image getImage(String owner, String repo) throws StatusRuntimeException {
+  private Image getImage(String owner, String repo, String reference) throws StatusRuntimeException {
     return bufClient.getImage(GetImageRequest.newBuilder()
         .setOwner(owner)
         .setRepository(repo)
-        .setReference("main")
+        .setReference(reference)
         .build())
         .getImage();
   }
