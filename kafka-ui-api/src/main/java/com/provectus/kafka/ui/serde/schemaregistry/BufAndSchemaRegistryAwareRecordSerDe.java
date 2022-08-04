@@ -404,8 +404,14 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
           defaultRepoInfo.getReference(), fullyQualifiedTypeName);
     }
 
+    if (descriptor.isEmpty() && cachedDescriptor != null) {
+      log.info("Not found, falling back to cached descriptor")
+      descriptor = cachedDescriptor.getDescriptor();
+    }
+
     cachedDescriptor = new CachedDescriptor(currentDate, descriptor);
     cachedMessageDescriptorMap.put(cacheKey, cachedDescriptor);
+
 
     return descriptor;
   }
