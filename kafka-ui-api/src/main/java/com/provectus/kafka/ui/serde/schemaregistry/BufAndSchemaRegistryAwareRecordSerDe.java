@@ -405,7 +405,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     }
 
     if (descriptor.isEmpty() && cachedDescriptor != null) {
-      log.info("Not found, falling back to cached descriptor")
+      log.info("Not found, falling back to cached descriptor");
       descriptor = cachedDescriptor.getDescriptor();
     }
 
