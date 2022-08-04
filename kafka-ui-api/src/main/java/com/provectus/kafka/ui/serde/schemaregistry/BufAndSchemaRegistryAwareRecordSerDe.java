@@ -412,7 +412,6 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
     cachedDescriptor = new CachedDescriptor(currentDate, descriptor);
     cachedMessageDescriptorMap.put(cacheKey, cachedDescriptor);
 
-
     return descriptor;
   }
 
