@@ -495,7 +495,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
 
       return JsonFormat.printer().print(protoMsg);
     } catch (IOException e) {
-      log.error("failed protobuf derserialization: {}", e);
+      log.error("failed protobuf derserialization", e);
     }
 
     // Try using the default repo info.
@@ -512,7 +512,7 @@ public class BufAndSchemaRegistryAwareRecordSerDe implements RecordSerDe {
         return printer.print(protoMsg);
       }
     } catch (IOException e) {
-      log.error("failed protobuf derserialization with default repo info: {}", e);
+      log.error("failed protobuf derserialization with default repo info", e);
     }
 
     return new String(value, StandardCharsets.UTF_8);

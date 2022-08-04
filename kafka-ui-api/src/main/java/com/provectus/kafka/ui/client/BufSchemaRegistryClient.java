@@ -49,7 +49,7 @@ public class BufSchemaRegistryClient {
     try {
       image = getImage(owner, repo, reference);
     } catch (StatusRuntimeException e) {
-      log.error("Failed to get image {}", e);
+      log.error("Failed to get image", e);
       return new ArrayList<>();
     }
 
@@ -57,7 +57,7 @@ public class BufSchemaRegistryClient {
     try {
       fileDescriptorSet = FileDescriptorSet.parseFrom(image.toByteArray());
     } catch (InvalidProtocolBufferException e) {
-      log.error("Failed to parse Image into FileDescriptorSet {}", e);
+      log.error("Failed to parse Image into FileDescriptorSet", e);
       return new ArrayList<>();
     }
 
@@ -77,7 +77,7 @@ public class BufSchemaRegistryClient {
         allFileDescriptors.add(desc);
       }
     } catch (DescriptorValidationException e) {
-      log.error("Failed to create dependencies map {}", e);
+      log.error("Failed to create dependencies map", e);
     }
 
     return allFileDescriptors;
@@ -88,7 +88,7 @@ public class BufSchemaRegistryClient {
     List<String> parts = Arrays.asList(fullyQualifiedTypeName.split("\\."));
 
     if (parts.isEmpty()) {
-      log.warn("Cannot get package name and type name from {}", fullyQualifiedTypeName);
+      log.warn("Cannot get package name and type name from", fullyQualifiedTypeName);
       return Optional.empty();
     }
 
